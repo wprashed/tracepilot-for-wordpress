@@ -4,295 +4,116 @@
 (function($) {
     'use strict';
     
-    // Global variables
-    let currentOffset = 0;
-    let currentLimit = 50;
-    let totalLogs = 0;
-    let currentFilters = {};
-    let liveFeedInterval = null;
-    let charts = {};
+    // Store chart instances
+    const charts = {
+        dailyActivity: null,
+        userActivity: null,
+        actionTypes: null
+    };
     
     // Initialize on document ready
     $(document).ready(function() {
-        // Initialize date pickers
-        if ($.fn.flatpickr) {
-            $('#wpal-date-range, #wpal-export-date-range').flatpickr({
-                mode: 'range',
-                dateFormat: 'Y-m-d',
-                onChange: function(selectedDates, dateStr, instance) {
-                    if (selectedDates.length === 2) {
-                        const from = formatDate(selectedDates[0]);
-                        const to = formatDate(selectedDates[1]);
-                        
-                        if (instance.element.id === 'wpal-export-date-range') {
-                            $('#wpal-export-from').val(from);
-                            $('#wpal-export-to').val(to);
-                        }
-                    }
-                }
-            });
-        }
-        
-        // Initialize logs page
-        if ($('#wpal-logs-table').length) {
-            loadLogs();
-            
-            // Apply filters
-            $('#wpal-apply-filters').on('click', function() {
-                currentOffset = 0;
-                applyFilters();
-                loadLogs();
-            });
-            
-            // Reset filters
-            $('#wpal-reset-filters').on('click', function() {
-                $('#wpal-date-range').val('');
-                $('#wpal-user-filter').val('');
-                $('#wpal-action-filter').val('');
-                $('#wpal-severity-filter').val('');
-                
-                currentOffset = 0;
-                currentFilters = {};
-                loadLogs();
-            });
-            
-            // Load more logs
-            $('#wpal-load-more').on('click', function() {
-                currentOffset += currentLimit;
-                loadLogs(true);
-            });
-            
-            // Export filtered results
-            $('#wpal-export-filtered').on('click', function() {
-                exportFilteredLogs();
-            });
-            
-            // Clear logs
-            $('#wpal-clear-logs').on('click', function() {
-                if (confirm('Are you sure you want to clear all logs? This action cannot be undone.')) {
-                    clearLogs();
-                }
-            });
-        }
-        
-        // Initialize dashboard page
-        if ($('#wpal-daily-activity-chart').length) {
-            loadDashboardData();
-            startLiveFeed();
-        }
-        
-        // Initialize export page
-        if ($('#wpal-export-form').length) {
-            // Update hidden fields on form submission
-            $('#wpal-export-form').on('submit', function() {
-                $('#wpal-export-user-value').val($('#wpal-export-user').val());
-                $('#wpal-export-action-value').val($('#wpal-export-action').val());
-                $('#wpal-export-severity-value').val($('#wpal-export-severity').val());
-                $('#wpal-export-format-value').val($('#wpal-export-format').val());
-                $('#wpal-export-limit-value').val($('#wpal-export-limit').val());
-            });
-            
-            // Show/hide custom filters
-            $('#wpal-schedule-filter').on('change', function() {
-                if ($(this).val() === 'custom') {
-                    $('#wpal-schedule-custom-filters').removeClass('d-none');
-                } else {
-                    $('#wpal-schedule-custom-filters').addClass('d-none');
-                }
-            });
-            
-            // Handle scheduled export form
-            $('#wpal-scheduled-export-form').on('submit', function(e) {
-                e.preventDefault();
-                saveScheduledExport();
-            });
-            
-            // Load scheduled exports
-            loadScheduledExports();
-        }
+        initDataTables();
+        initDashboard();
+        initExport();
+        initSettings();
+        initFilters();
     });
     
-    // Load logs from the API
-    function loadLogs(append = false) {
-        const params = {
-            limit: currentLimit,
-            offset: currentOffset,
-            ...currentFilters
-        };
-        
-        $.ajax({
-            url: WPAL.rest_url + 'logs',
-            method: 'GET',
-            beforeSend: function(xhr) {
-                xhr.setRequestHeader('X-WP-Nonce', WPAL.nonce);
-            },
-            data: params,
-            success: function(response) {
-                renderLogs(response, append);
-                
-                // Update showing count
-                if (response.length < currentLimit) {
-                    totalLogs = currentOffset + response.length;
-                    $('#wpal-load-more').prop('disabled', true);
-                } else {
-                    $('#wpal-load-more').prop('disabled', false);
+    // Initialize DataTables
+    function initDataTables() {
+        if ($('#wpal-logs-table').length) {
+            $('#wpal-logs-table').DataTable({
+                order: [[0, 'desc']],
+                pageLength: 25,
+                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
+                responsive: true,
+                language: {
+                    search: 'Quick Filter:',
+                    lengthMenu: 'Show _MENU_ entries per page',
+                    info: 'Showing _START_ to _END_ of _TOTAL_ entries',
+                    infoEmpty: 'Showing 0 to 0 of 0 entries',
+                    infoFiltered: '(filtered from _MAX_ total entries)'
                 }
+            });
+            
+            // Delete log entry
+            $('#wpal-logs-table').on('click', '.delete-log', function(e) {
+                e.preventDefault();
                 
-                $('#wpal-showing-count').text('Showing ' + (currentOffset + response.length) + ' of ' + (totalLogs || 'many') + ' logs');
-            },
-            error: function(xhr) {
-                console.error('Error loading logs:', xhr.responseText);
-                alert('Error loading logs. Please try again.');
-            }
-        });
-    }
-    
-    // Render logs in the table
-    function renderLogs(logs, append = false) {
-        if (!append) {
-            $('#wpal-logs-body').empty();
-        }
-        
-        if (logs.length === 0) {
-            if (!append) {
-                $('#wpal-logs-body').html('<tr><td colspan="8" class="text-center">No logs found</td></tr>');
-            }
-            return;
-        }
-        
-        let html = '';
-        
-        logs.forEach(function(log) {
-            const severityClass = getSeverityClass(log.severity);
-            
-            html += '<tr>';
-            html += '<td>' + formatDateTime(log.time) + '</td>';
-            html += '<td>' + escapeHtml(log.username) + '</td>';
-            html += '<td>' + escapeHtml(log.user_role || 'N/A') + '</td>';
-            html += '<td>' + escapeHtml(log.action) + '</td>';
-            html += '<td>' + escapeHtml(log.ip) + '</td>';
-            html += '<td>' + escapeHtml(log.browser || 'Unknown') + '</td>';
-            html += '<td><span class="badge ' + severityClass + '">' + (log.severity || 'info').toUpperCase() + '</span></td>';
-            
-            // Details button
-            html += '<td>';
-            if (log.context) {
-                html += '<button class="button button-small view-details" data-log=\'' + JSON.stringify(log) + '\'>Details</button>';
-            } else {
-                html += 'N/A';
-            }
-            html += '</td>';
-            
-            html += '</tr>';
-        });
-        
-        $('#wpal-logs-body').append(html);
-        
-        // Attach event handlers for detail buttons
-        $('.view-details').off('click').on('click', function() {
-            const log = $(this).data('log');
-            showLogDetails(log);
-        });
-    }
-    
-    // Show log details in modal
-    function showLogDetails(log) {
-        let html = '<table class="table table-bordered">';
-        
-        // Add all log properties
-        for (const key in log) {
-            if (key === 'context') continue;
-            html += '<tr>';
-            html += '<th>' + key.charAt(0).toUpperCase() + key.slice(1) + '</th>';
-            html += '<td>' + escapeHtml(log[key]) + '</td>';
-            html += '</tr>';
-        }
-        
-        // Add context if available
-        if (log.context) {
-            html += '<tr>';
-            html += '<th>Context</th>';
-            html += '<td><pre>' + JSON.stringify(log.context, null, 2) + '</pre></td>';
-            html += '</tr>';
-        }
-        
-        html += '</table>';
-        
-        $('#wpal-log-details-content').html(html);
-        
-        // Show modal
-        const modal = new bootstrap.Modal(document.getElementById('wpal-log-details-modal'));
-        modal.show();
-    }
-    
-    // Apply filters from form
-    function applyFilters() {
-        currentFilters = {};
-        
-        const dateRange = $('#wpal-date-range').val();
-        if (dateRange) {
-            const dates = dateRange.split(' to ');
-            if (dates.length === 2) {
-                currentFilters.from = dates[0] + ' 00:00:00';
-                currentFilters.to = dates[1] + ' 23:59:59';
-            }
-        }
-        
-        const user = $('#wpal-user-filter').val();
-        if (user) {
-            currentFilters.user = user;
-        }
-        
-        const action = $('#wpal-action-filter').val();
-        if (action) {
-            currentFilters.action_type = action;
-        }
-        
-        const severity = $('#wpal-severity-filter').val();
-        if (severity) {
-            currentFilters.severity = severity;
-        }
-    }
-    
-    // Export filtered logs
-    function exportFilteredLogs() {
-        applyFilters();
-        
-        let url = WPAL.rest_url + 'export?_wpnonce=' + WPAL.nonce;
-        
-        for (const key in currentFilters) {
-            url += '&' + key + '=' + encodeURIComponent(currentFilters[key]);
-        }
-        
-        window.location.href = url;
-    }
-    
-    // Clear all logs
-    function clearLogs() {
-        $.ajax({
-            url: WPAL.ajax_url,
-            method: 'POST',
-            data: {
-                action: 'wpal_clear_logs',
-                nonce: WPAL.nonce
-            },
-            success: function(response) {
-                if (response.success) {
-                    alert('Logs cleared successfully.');
-                    currentOffset = 0;
-                    loadLogs();
-                } else {
-                    alert('Error clearing logs: ' + response.data);
+                if (confirm(WPAL.confirm_delete)) {
+                    const logId = $(this).data('id');
+                    
+                    $.ajax({
+                        url: WPAL.ajax_url,
+                        method: 'POST',
+                        data: {
+                            action: 'wpal_delete_log',
+                            nonce: WPAL.delete_nonce,
+                            log_id: logId
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                location.reload();
+                            } else {
+                                alert(response.data);
+                            }
+                        },
+                        error: function() {
+                            alert('An error occurred while deleting the log entry.');
+                        }
+                    });
                 }
-            },
-            error: function() {
-                alert('Error clearing logs. Please try again.');
-            }
-        });
+            });
+            
+            // Delete all logs
+            $('#delete-all-logs').on('click', function(e) {
+                e.preventDefault();
+                
+                if (confirm(WPAL.confirm_delete_all)) {
+                    $.ajax({
+                        url: WPAL.ajax_url,
+                        method: 'POST',
+                        data: {
+                            action: 'wpal_delete_all_logs',
+                            nonce: WPAL.delete_nonce
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                location.reload();
+                            } else {
+                                alert(response.data);
+                            }
+                        },
+                        error: function() {
+                            alert('An error occurred while deleting all log entries.');
+                        }
+                    });
+                }
+            });
+        }
+    }
+    
+    // Initialize dashboard
+    function initDashboard() {
+        if ($('#wpal-dashboard').length) {
+            loadDashboardData();
+            
+            // Refresh dashboard data
+            $('#refresh-dashboard').on('click', function(e) {
+                e.preventDefault();
+                loadDashboardData();
+            });
+        }
     }
     
     // Load dashboard data
     function loadDashboardData() {
+        // Show loading indicators
+        $('#wpal-daily-activity-chart').closest('.card-body').html('<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p>Loading chart data...</p></div>');
+        $('#wpal-user-activity-chart').closest('.card-body').html('<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p>Loading chart data...</p></div>');
+        $('#wpal-action-types-chart').closest('.card-body').html('<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p>Loading chart data...</p></div>');
+        
         $.ajax({
             url: WPAL.rest_url + 'stats',
             method: 'GET',
@@ -304,248 +125,356 @@
             },
             error: function(xhr) {
                 console.error('Error loading dashboard data:', xhr.responseText);
-                alert('Error loading dashboard data. Please try again.');
+                
+                // Show friendly error message with retry button
+                const errorHtml = '<div class="text-center"><p class="text-danger">Error loading dashboard data.</p><button class="button retry-dashboard-load">Retry</button></div>';
+                $('#wpal-daily-activity-chart').closest('.card-body').html(errorHtml);
+                $('#wpal-user-activity-chart').closest('.card-body').html(errorHtml);
+                $('#wpal-action-types-chart').closest('.card-body').html(errorHtml);
+                
+                // Add retry button handler
+                $('.retry-dashboard-load').on('click', function() {
+                    loadDashboardData();
+                });
             }
         });
     }
     
     // Render dashboard charts
     function renderDashboardCharts(data) {
+        // Recreate canvas elements to avoid Chart.js errors
+        $('#wpal-daily-activity-chart').closest('.card-body').html('<canvas id="wpal-daily-activity-chart" height="250"></canvas>');
+        $('#wpal-user-activity-chart').closest('.card-body').html('<canvas id="wpal-user-activity-chart" height="250"></canvas>');
+        $('#wpal-action-types-chart').closest('.card-body').html('<canvas id="wpal-action-types-chart" height="250"></canvas>');
+        
         // Daily activity chart
         if (data.daily_activity && data.daily_activity.length > 0) {
-            const ctx1 = document.getElementById('wpal-daily-activity-chart').getContext('2d');
-            
-            const labels = data.daily_activity.map(item => item.date);
-            const values = data.daily_activity.map(item => item.count);
-            
-            charts.dailyActivity = new Chart(ctx1, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Daily Activity',
-                        data: values,
-                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        borderWidth: 2,
-                        tension: 0.3,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                precision: 0
+            const ctx1 = document.getElementById('wpal-daily-activity-chart');
+            if (ctx1) {
+                const labels = data.daily_activity.map(item => item.date);
+                const values = data.daily_activity.map(item => parseInt(item.count));
+                
+                if (charts.dailyActivity) {
+                    charts.dailyActivity.destroy();
+                }
+                
+                charts.dailyActivity = new Chart(ctx1, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Daily Activity',
+                            data: values,
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    precision: 0
+                                }
                             }
                         }
                     }
-                }
-            });
+                });
+            }
+        } else {
+            $('#wpal-daily-activity-chart').closest('.card-body').html('<div class="text-center"><p>No activity data available</p></div>');
         }
         
         // User activity chart
         if (data.user_activity && data.user_activity.length > 0) {
-            const ctx2 = document.getElementById('wpal-user-activity-chart').getContext('2d');
-            
-            const labels = data.user_activity.map(item => item.username);
-            const values = data.user_activity.map(item => item.count);
-            
-            charts.userActivity = new Chart(ctx2, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Activity Count',
-                        data: values,
-                        backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                precision: 0
+            const ctx2 = document.getElementById('wpal-user-activity-chart');
+            if (ctx2) {
+                const labels = data.user_activity.map(item => item.username);
+                const values = data.user_activity.map(item => parseInt(item.count));
+                
+                if (charts.userActivity) {
+                    charts.userActivity.destroy();
+                }
+                
+                charts.userActivity = new Chart(ctx2, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Activity Count',
+                            data: values,
+                            backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    precision: 0
+                                }
                             }
                         }
                     }
-                }
-            });
+                });
+            }
+        } else {
+            $('#wpal-user-activity-chart').closest('.card-body').html('<div class="text-center"><p>No user activity data available</p></div>');
         }
         
         // Action types chart
         if (data.action_types && data.action_types.length > 0) {
-            const ctx3 = document.getElementById('wpal-action-types-chart').getContext('2d');
-            
-            const labels = data.action_types.map(item => item.action_type);
-            const values = data.action_types.map(item => item.count);
-            
-            charts.actionTypes = new Chart(ctx3, {
-                type: 'doughnut',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        data: values,
-                        backgroundColor: [
-                            'rgba(255, 99, 132, 0.6)',
-                            'rgba(54, 162, 235, 0.6)',
-                            'rgba(255, 206, 86, 0.6)',
-                            'rgba(75, 192, 192, 0.6)',
-                            'rgba(153, 102, 255, 0.6)',
-                            'rgba(255, 159, 64, 0.6)',
-                            'rgba(199, 199, 199, 0.6)',
-                            'rgba(83, 102, 255, 0.6)',
-                            'rgba(40, 159, 64, 0.6)',
-                            'rgba(210, 199, 199, 0.6)'
-                        ],
-                        borderColor: [
-                            'rgba(255, 99, 132, 1)',
-                            'rgba(54, 162, 235, 1)',
-                            'rgba(255, 206, 86, 1)',
-                            'rgba(75, 192, 192, 1)',
-                            'rgba(153, 102, 255, 1)',
-                            'rgba(255, 159, 64, 1)',
-                            'rgba(199, 199, 199, 1)',
-                            'rgba(83, 102, 255, 1)',
-                            'rgba(40, 159, 64, 1)',
-                            'rgba(210, 199, 199, 1)'
-                        ],
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            position: 'right',
+            const ctx3 = document.getElementById('wpal-action-types-chart');
+            if (ctx3) {
+                const labels = data.action_types.map(item => item.action_type);
+                const values = data.action_types.map(item => parseInt(item.count));
+                
+                if (charts.actionTypes) {
+                    charts.actionTypes.destroy();
+                }
+                
+                charts.actionTypes = new Chart(ctx3, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: values,
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 0.6)',
+                                'rgba(54, 162, 235, 0.6)',
+                                'rgba(255, 206, 86, 0.6)',
+                                'rgba(75, 192, 192, 0.6)',
+                                'rgba(153, 102, 255, 0.6)',
+                                'rgba(255, 159, 64, 0.6)',
+                                'rgba(199, 199, 199, 0.6)',
+                                'rgba(83, 102, 255, 0.6)',
+                                'rgba(40, 159, 64, 0.6)',
+                                'rgba(210, 199, 199, 0.6)'
+                            ],
+                            borderColor: [
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(54, 162, 235, 1)',
+                                'rgba(255, 206, 86, 1)',
+                                'rgba(75, 192, 192, 1)',
+                                'rgba(153, 102, 255, 1)',
+                                'rgba(255, 159, 64, 1)',
+                                'rgba(199, 199, 199, 1)',
+                                'rgba(83, 102, 255, 1)',
+                                'rgba(40, 159, 64, 1)',
+                                'rgba(210, 199, 199, 1)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                            }
                         }
                     }
+                });
+            }
+        } else {
+            $('#wpal-action-types-chart').closest('.card-body').html('<div class="text-center"><p>No action type data available</p></div>');
+        }
+    }
+    
+    // Initialize export
+    function initExport() {
+        if ($('#wpal-export-form').length) {
+            $('#wpal-export-form').on('submit', function(e) {
+                const format = $('#export-format').val();
+                const dateFrom = $('#date-from').val();
+                const dateTo = $('#date-to').val();
+                const severity = $('#export-severity').val();
+                
+                if (!dateFrom || !dateTo) {
+                    e.preventDefault();
+                    alert('Please select both start and end dates.');
+                    return false;
                 }
+                
+                return true;
             });
         }
     }
     
-    // Start live feed
-    function startLiveFeed() {
-        // Initial load
-        loadLiveFeed();
-        
-        // Set interval for updates
-        liveFeedInterval = setInterval(loadLiveFeed, 30000); // Update every 30 seconds
-        
-        // Clean up on page unload
-        $(window).on('beforeunload', function() {
-            if (liveFeedInterval) {
-                clearInterval(liveFeedInterval);
+    // Initialize settings
+    function initSettings() {
+        if ($('#wpal-settings-form').length) {
+            // Color picker
+            if ($.fn.wpColorPicker) {
+                $('.wpal-color-picker').wpColorPicker();
             }
-        });
-    }
-    
-    // Load live feed data
-    function loadLiveFeed() {
-        $.ajax({
-            url: WPAL.ajax_url,
-            method: 'POST',
-            data: {
-                action: 'wpal_live_feed',
-                nonce: WPAL.nonce
-            },
-            success: function(response) {
-                if (response.success) {
-                    renderLiveFeed(response.data);
-                }
-            },
-            error: function() {
-                console.error('Error loading live feed');
-            }
-        });
-    }
-    
-    // Render live feed
-    function renderLiveFeed(logs) {
-        if (!logs || logs.length === 0) {
-            $('#wpal-live-feed').html('<p class="text-center">No recent activity</p>');
-            return;
-        }
-        
-        let html = '';
-        
-        logs.forEach(function(log) {
-            const severityClass = getSeverityClass(log.severity);
             
-            html += '<div class="live-feed-item mb-2 p-2 border-bottom">';
-            html += '<div class="d-flex justify-content-between">';
-            html += '<span class="fw-bold">' + escapeHtml(log.username) + '</span>';
-            html += '<span class="text-muted small">' + formatDateTime(log.time) + '</span>';
-            html += '</div>';
-            html += '<div>' + escapeHtml(log.action) + '</div>';
-            html += '<div class="d-flex justify-content-between align-items-center mt-1">';
-            html += '<span class="badge ' + severityClass + '">' + (log.severity || 'info').toUpperCase() + '</span>';
-            html += '<span class="text-muted small">' + escapeHtml(log.ip) + '</span>';
-            html += '</div>';
-            html += '</div>';
-        });
-        
-        $('#wpal-live-feed').html(html);
-    }
-    
-    // Load scheduled exports
-    function loadScheduledExports() {
-        // This would be implemented with an AJAX call to get the scheduled exports
-        // For now, we'll just show a placeholder
-        $('#wpal-scheduled-exports-list').html('<tr><td colspan="5" class="text-center">No scheduled exports configured</td></tr>');
-    }
-    
-    // Save scheduled export
-    function saveScheduledExport() {
-        // This would be implemented with an AJAX call to save the scheduled export
-        alert('This feature will be implemented in the next version.');
-    }
-    
-    // Helper function to format date
-    function formatDate(date) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    }
-    
-    // Helper function to format date and time
-    function formatDateTime(dateTimeStr) {
-        const date = new Date(dateTimeStr);
-        return date.toLocaleString();
-    }
-    
-    // Helper function to get severity class
-    function getSeverityClass(severity) {
-        switch (severity) {
-            case 'error':
-                return 'bg-danger';
-            case 'warning':
-                return 'bg-warning text-dark';
-            case 'info':
-            default:
-                return 'bg-success';
+            // Save settings
+            $('#wpal-settings-form').on('submit', function(e) {
+                e.preventDefault();
+                
+                const settings = {
+                    retention_days: $('#retention-days').val(),
+                    log_storage: $('input[name="log-storage"]:checked').val(),
+                    notification_email: $('#notification-email').val(),
+                    notification_events: [],
+                    daily_report: $('#daily-report').is(':checked'),
+                    webhook_url: $('#webhook-url').val(),
+                    severity_colors: {
+                        info: $('#info-color').val(),
+                        warning: $('#warning-color').val(),
+                        error: $('#error-color').val()
+                    },
+                    push_enabled: $('#push-enabled').is(':checked'),
+                    slack_webhook: $('#slack-webhook').val(),
+                    discord_webhook: $('#discord-webhook').val(),
+                    telegram_bot_token: $('#telegram-bot-token').val(),
+                    telegram_chat_id: $('#telegram-chat-id').val()
+                };
+                
+                // Get notification events
+                $('input[name="notification-events[]"]:checked').each(function() {
+                    settings.notification_events.push($(this).val());
+                });
+                
+                // Save settings via AJAX
+                $.ajax({
+                    url: WPAL.ajax_url,
+                    method: 'POST',
+                    data: {
+                        action: 'wpal_save_settings',
+                        nonce: WPAL.settings_nonce,
+                        settings: settings
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            $('#settings-message').html('<div class="notice notice-success is-dismissible"><p>' + response.data + '</p></div>');
+                        } else {
+                            $('#settings-message').html('<div class="notice notice-error is-dismissible"><p>' + response.data + '</p></div>');
+                        }
+                        
+                        // Scroll to message
+                        $('html, body').animate({
+                            scrollTop: $('#settings-message').offset().top - 50
+                        }, 500);
+                    },
+                    error: function() {
+                        $('#settings-message').html('<div class="notice notice-error is-dismissible"><p>An error occurred while saving settings.</p></div>');
+                        
+                        // Scroll to message
+                        $('html, body').animate({
+                            scrollTop: $('#settings-message').offset().top - 50
+                        }, 500);
+                    }
+                });
+            });
+            
+            // Toggle notification settings
+            $('#push-enabled').on('change', function() {
+                if ($(this).is(':checked')) {
+                    $('.push-settings').show();
+                } else {
+                    $('.push-settings').hide();
+                }
+            }).trigger('change');
+            
+            // Toggle integration settings
+            $('.integration-toggle').on('change', function() {
+                const target = $(this).data('target');
+                if ($(this).is(':checked')) {
+                    $(target).show();
+                } else {
+                    $(target).hide();
+                }
+            }).trigger('change');
         }
     }
     
-    // Helper function to escape HTML
-    function escapeHtml(str) {
-        if (!str) return '';
-        
-        return str
-            .toString()
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
+    // Initialize filters
+    function initFilters() {
+        if ($('#wpal-filter-form').length) {
+            // Date range picker
+            if ($.fn.daterangepicker) {
+                $('#filter-date-range').daterangepicker({
+                    autoUpdateInput: false,
+                    locale: {
+                        cancelLabel: 'Clear',
+                        format: 'YYYY-MM-DD'
+                    }
+                });
+                
+                $('#filter-date-range').on('apply.daterangepicker', function(ev, picker) {
+                    $(this).val(picker.startDate.format('YYYY-MM-DD') + ' - ' + picker.endDate.format('YYYY-MM-DD'));
+                });
+                
+                $('#filter-date-range').on('cancel.daterangepicker', function(ev, picker) {
+                    $(this).val('');
+                });
+            }
+            
+            // Apply filters
+            $('#wpal-filter-form').on('submit', function(e) {
+                e.preventDefault();
+                
+                const filters = {
+                    date_range: $('#filter-date-range').val(),
+                    user: $('#filter-user').val(),
+                    action: $('#filter-action').val(),
+                    severity: $('#filter-severity').val()
+                };
+                
+                // Apply filters to DataTable
+                const table = $('#wpal-logs-table').DataTable();
+                
+                // Clear all filters
+                table.search('').columns().search('').draw();
+                
+                // Apply each filter
+                if (filters.user) {
+                    table.column(2).search(filters.user).draw();
+                }
+                
+                if (filters.action) {
+                    table.column(3).search(filters.action).draw();
+                }
+                
+                if (filters.severity) {
+                    table.column(6).search(filters.severity).draw();
+                }
+                
+                // Date range filtering is more complex and would require custom filtering
+                if (filters.date_range) {
+                    const dates = filters.date_range.split(' - ');
+                    if (dates.length === 2) {
+                        const startDate = new Date(dates[0]);
+                        const endDate = new Date(dates[1]);
+                        
+                        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+                            const date = new Date(data[0]);
+                            return date >= startDate && date <= endDate;
+                        });
+                        
+                        table.draw();
+                        
+                        // Remove the custom filter
+                        $.fn.dataTable.ext.search.pop();
+                    }
+                }
+            });
+            
+            // Reset filters
+            $('#reset-filters').on('click', function() {
+                $('#wpal-filter-form')[0].reset();
+                $('#wpal-logs-table').DataTable().search('').columns().search('').draw();
+            });
+        }
     }
     
 })(jQuery);
