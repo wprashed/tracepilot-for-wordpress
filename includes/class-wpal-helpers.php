@@ -315,4 +315,81 @@ class WPAL_Helpers {
                 return sanitize_text_field($data);
         }
     }
+    
+    /**
+     * Write log to database and/or file
+     * This is the missing method that was causing the error
+     */
+    public static function write_log($log_data) {
+        global $wpdb;
+        self::init();
+        
+        // Get log storage option
+        $log_storage = get_option('wpal_log_storage', 'both');
+        
+        // Write to database
+        if ($log_storage === 'database' || $log_storage === 'both') {
+            $wpdb->insert(
+                self::$db_table,
+                $log_data,
+                [
+                    'time' => '%s',
+                    'user_id' => '%d',
+                    'username' => '%s',
+                    'user_role' => '%s',
+                    'action' => '%s',
+                    'ip' => '%s',
+                    'browser' => '%s',
+                    'severity' => '%s',
+                    'context' => '%s',
+                ]
+            );
+            
+            // Get the inserted log ID
+            $log_id = $wpdb->insert_id;
+            
+            // Create log object for hooks
+            if ($log_id) {
+                $log = (object) $log_data;
+                $log->id = $log_id;
+                
+                // Trigger action for notifications
+                do_action('wpal_log_created', $log);
+                
+                return $log_id;
+            }
+        }
+        
+        // Write to CSV file
+        if ($log_storage === 'file' || $log_storage === 'both') {
+            $csv_file = WPAL_PATH . 'logs/activity.csv';
+            
+            // Create directory if it doesn't exist
+            $log_dir = WPAL_PATH . 'logs/';
+            if (!file_exists($log_dir)) {
+                mkdir($log_dir, 0755, true);
+            }
+            
+            // Create file with header if it doesn't exist
+            if (!file_exists($csv_file)) {
+                file_put_contents($csv_file, "Time,User,Action,IP,UserRole,Browser,Severity\n");
+            }
+            
+            // Append log entry
+            $line = sprintf(
+                "%s,%s,%s,%s,%s,%s,%s\n",
+                $log_data['time'],
+                $log_data['username'],
+                str_replace(',', ';', $log_data['action']),
+                $log_data['ip'],
+                str_replace(',', ';', $log_data['user_role']),
+                $log_data['browser'],
+                $log_data['severity']
+            );
+            
+            file_put_contents($csv_file, $line, FILE_APPEND);
+        }
+        
+        return false;
+    }
 }
