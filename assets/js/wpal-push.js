@@ -1,6 +1,6 @@
 /**
- * WP Activity Logger Pro - Real-time Push Notifications
- */
+* WP Activity Logger Pro - Real-time Push Notifications
+*/
 (function($) {
     'use strict';
     
@@ -192,7 +192,6 @@
     
     // Helper function to format date and time
     function formatDateTime(dateTimeStr) {
-        const date = new Date( formatDateTime(dateTimeStr) {
         const date = new Date(dateTimeStr);
         return date.toLocaleString();
     }
@@ -210,4 +209,4 @@
             .replace(/'/g, '&#039;');
     }
     
-})(jQuery);
+ })(jQuery);
