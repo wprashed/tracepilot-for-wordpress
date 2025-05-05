@@ -517,4 +517,52 @@ class WPAL_Helpers {
         
         return 'Unknown';
     }
+
+    // Add this function to the WPAL_Helpers class
+    public static function check_and_fix_database() {
+        self::init();
+        
+        global $wpdb;
+        $table_name = self::$db_table;
+        
+        // Check if table exists
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
+        
+        if (!$table_exists) {
+            // Table doesn't exist, create it
+            self::create_db_table();
+            
+            // Add some initial data so dashboard doesn't show empty
+            $current_user = wp_get_current_user();
+            $entry = [
+                'time' => current_time('mysql'),
+                'user_id' => $current_user->ID,
+                'username' => $current_user->user_login,
+                'user_role' => implode(', ', $current_user->roles),
+                'action' => 'Database table created',
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'Unknown',
+                'browser' => self::get_browser_name(),
+                'severity' => 'info',
+                'context' => json_encode(['automatic' => true]),
+            ];
+            
+            $wpdb->insert(
+                self::$db_table,
+                $entry,
+                [
+                    'time' => '%s',
+                    'user_id' => '%d',
+                    'username' => '%s',
+                    'user_role' => '%s',
+                    'action' => '%s',
+                    'ip' => '%s',
+                    'browser' => '%s',
+                    'severity' => '%s',
+                    'context' => '%s',
+                ]
+            );
+        }
+        
+        return $table_exists;
+    }
 }
