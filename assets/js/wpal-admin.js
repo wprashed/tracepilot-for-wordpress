@@ -1,488 +1,120 @@
 /**
- * WP Activity Logger Pro - Admin JavaScript
+ * Admin JavaScript for WP Activity Logger Pro
  */
 (function($) {
     'use strict';
-    
-    // Store chart instances
-    const charts = {
-        dailyActivity: null,
-        userActivity: null,
-        actionTypes: null
-    };
-    
-    // Initialize on document ready
-    $(document).ready(function() {
-        initDataTables();
-        initDashboard();
-        initExport();
-        initSettings();
-        initFilters();
-    });
-    
-    // Initialize DataTables
+
+    // Initialize DataTables only if not already initialized
     function initDataTables() {
-        if ($('#wpal-logs-table').length) {
-            $('#wpal-logs-table').DataTable({
-                order: [[0, 'desc']],
-                pageLength: 25,
-                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
-                responsive: true,
-                language: {
-                    search: 'Quick Filter:',
-                    lengthMenu: 'Show _MENU_ entries per page',
-                    info: 'Showing _START_ to _END_ of _TOTAL_ entries',
-                    infoEmpty: 'Showing 0 to 0 of 0 entries',
-                    infoFiltered: '(filtered from _MAX_ total entries)'
-                }
-            });
-            
-            // Delete log entry
-            $('#wpal-logs-table').on('click', '.delete-log', function(e) {
-                e.preventDefault();
-                
-                if (confirm(WPAL.confirm_delete)) {
-                    const logId = $(this).data('id');
-                    
-                    $.ajax({
-                        url: WPAL.ajax_url,
-                        method: 'POST',
-                        data: {
-                            action: 'wpal_delete_log',
-                            nonce: WPAL.delete_nonce,
-                            log_id: logId
-                        },
-                        success: function(response) {
-                            if (response.success) {
-                                location.reload();
-                            } else {
-                                alert(response.data);
-                            }
-                        },
-                        error: function() {
-                            alert('An error occurred while deleting the log entry.');
-                        }
-                    });
-                }
-            });
-            
-            // Delete all logs
-            $('#delete-all-logs').on('click', function(e) {
-                e.preventDefault();
-                
-                if (confirm(WPAL.confirm_delete_all)) {
-                    $.ajax({
-                        url: WPAL.ajax_url,
-                        method: 'POST',
-                        data: {
-                            action: 'wpal_delete_all_logs',
-                            nonce: WPAL.delete_nonce
-                        },
-                        success: function(response) {
-                            if (response.success) {
-                                location.reload();
-                            } else {
-                                alert(response.data);
-                            }
-                        },
-                        error: function() {
-                            alert('An error occurred while deleting all log entries.');
-                        }
-                    });
-                }
-            });
+        if ($.fn.dataTable.isDataTable('#wpal-logs-table')) {
+            // Table already initialized, no need to reinitialize
+            return;
         }
-    }
-    
-    // Initialize dashboard
-    function initDashboard() {
-        if ($('#wpal-dashboard').length) {
-            loadDashboardData();
-            
-            // Refresh dashboard data
-            $('#refresh-dashboard').on('click', function(e) {
-                e.preventDefault();
-                loadDashboardData();
-            });
-        }
-    }
-    
-    // Load dashboard data
-    function loadDashboardData() {
-        // Show loading indicators
-        $('#wpal-daily-activity-chart').closest('.card-body').html('<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p>Loading chart data...</p></div>');
-        $('#wpal-user-activity-chart').closest('.card-body').html('<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p>Loading chart data...</p></div>');
-        $('#wpal-action-types-chart').closest('.card-body').html('<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p>Loading chart data...</p></div>');
         
-        $.ajax({
-            url: WPAL.rest_url + 'stats',
-            method: 'GET',
-            beforeSend: function(xhr) {
-                xhr.setRequestHeader('X-WP-Nonce', WPAL.nonce);
-            },
-            success: function(response) {
-                renderDashboardCharts(response);
-            },
-            error: function(xhr) {
-                console.error('Error loading dashboard data:', xhr.responseText);
-                
-                // Show friendly error message with retry button
-                const errorHtml = '<div class="text-center"><p class="text-danger">Error loading dashboard data.</p><button class="button retry-dashboard-load">Retry</button></div>';
-                $('#wpal-daily-activity-chart').closest('.card-body').html(errorHtml);
-                $('#wpal-user-activity-chart').closest('.card-body').html(errorHtml);
-                $('#wpal-action-types-chart').closest('.card-body').html(errorHtml);
-                
-                // Add retry button handler
-                $('.retry-dashboard-load').on('click', function() {
-                    loadDashboardData();
-                });
+        // Initialize DataTables
+        $('#wpal-logs-table').DataTable({
+            order: [[4, 'desc']], // Sort by time column (index 4) in descending order
+            pageLength: 25,
+            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
+            responsive: true,
+            dom: 'Bfrtip',
+            buttons: [
+                'copy', 'csv', 'excel', 'pdf', 'print'
+            ],
+            language: {
+                search: '<span class="screen-reader-text">Search logs:</span> ',
+                searchPlaceholder: 'Search logs...',
+                info: 'Showing _START_ to _END_ of _TOTAL_ logs',
+                lengthMenu: 'Show _MENU_ logs per page'
             }
         });
     }
-    
-    // Render dashboard charts
-    function renderDashboardCharts(data) {
-        // Recreate canvas elements to avoid Chart.js errors
-        $('#wpal-daily-activity-chart').closest('.card-body').html('<canvas id="wpal-daily-activity-chart" height="250"></canvas>');
-        $('#wpal-user-activity-chart').closest('.card-body').html('<canvas id="wpal-user-activity-chart" height="250"></canvas>');
-        $('#wpal-action-types-chart').closest('.card-body').html('<canvas id="wpal-action-types-chart" height="250"></canvas>');
-        
-        // Daily activity chart
-        if (data.daily_activity && data.daily_activity.length > 0) {
-            const ctx1 = document.getElementById('wpal-daily-activity-chart');
-            if (ctx1) {
-                const labels = data.daily_activity.map(item => item.date);
-                const values = data.daily_activity.map(item => parseInt(item.count));
-                
-                if (charts.dailyActivity) {
-                    charts.dailyActivity.destroy();
-                }
-                
-                charts.dailyActivity = new Chart(ctx1, {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Daily Activity',
-                            data: values,
-                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                            borderColor: 'rgba(54, 162, 235, 1)',
-                            borderWidth: 2,
-                            tension: 0.3,
-                            fill: true
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                ticks: {
-                                    precision: 0
-                                }
-                            }
-                        }
-                    }
-                });
-            }
-        } else {
-            $('#wpal-daily-activity-chart').closest('.card-body').html('<div class="text-center"><p>No activity data available</p></div>');
-        }
-        
-        // User activity chart
-        if (data.user_activity && data.user_activity.length > 0) {
-            const ctx2 = document.getElementById('wpal-user-activity-chart');
-            if (ctx2) {
-                const labels = data.user_activity.map(item => item.username);
-                const values = data.user_activity.map(item => parseInt(item.count));
-                
-                if (charts.userActivity) {
-                    charts.userActivity.destroy();
-                }
-                
-                charts.userActivity = new Chart(ctx2, {
-                    type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Activity Count',
-                            data: values,
-                            backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                            borderColor: 'rgba(75, 192, 192, 1)',
-                            borderWidth: 1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                ticks: {
-                                    precision: 0
-                                }
-                            }
-                        }
-                    }
-                });
-            }
-        } else {
-            $('#wpal-user-activity-chart').closest('.card-body').html('<div class="text-center"><p>No user activity data available</p></div>');
-        }
-        
-        // Action types chart
-        if (data.action_types && data.action_types.length > 0) {
-            const ctx3 = document.getElementById('wpal-action-types-chart');
-            if (ctx3) {
-                const labels = data.action_types.map(item => item.action_type);
-                const values = data.action_types.map(item => parseInt(item.count));
-                
-                if (charts.actionTypes) {
-                    charts.actionTypes.destroy();
-                }
-                
-                charts.actionTypes = new Chart(ctx3, {
-                    type: 'doughnut',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            data: values,
-                            backgroundColor: [
-                                'rgba(255, 99, 132, 0.6)',
-                                'rgba(54, 162, 235, 0.6)',
-                                'rgba(255, 206, 86, 0.6)',
-                                'rgba(75, 192, 192, 0.6)',
-                                'rgba(153, 102, 255, 0.6)',
-                                'rgba(255, 159, 64, 0.6)',
-                                'rgba(199, 199, 199, 0.6)',
-                                'rgba(83, 102, 255, 0.6)',
-                                'rgba(40, 159, 64, 0.6)',
-                                'rgba(210, 199, 199, 0.6)'
-                            ],
-                            borderColor: [
-                                'rgba(255, 99, 132, 1)',
-                                'rgba(54, 162, 235, 1)',
-                                'rgba(255, 206, 86, 1)',
-                                'rgba(75, 192, 192, 1)',
-                                'rgba(153, 102, 255, 1)',
-                                'rgba(255, 159, 64, 1)',
-                                'rgba(199, 199, 199, 1)',
-                                'rgba(83, 102, 255, 1)',
-                                'rgba(40, 159, 64, 1)',
-                                'rgba(210, 199, 199, 1)'
-                            ],
-                            borderWidth: 1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: {
-                                position: 'right',
-                            }
-                        }
-                    }
-                });
-            }
-        } else {
-            $('#wpal-action-types-chart').closest('.card-body').html('<div class="text-center"><p>No action type data available</p></div>');
-        }
-    }
-    
-    // Initialize export
-    function initExport() {
-        if ($('#wpal-export-form').length) {
-            $('#wpal-export-form').on('submit', function(e) {
-                const format = $('#export-format').val();
-                const dateFrom = $('#date-from').val();
-                const dateTo = $('#date-to').val();
-                const severity = $('#export-severity').val();
-                
-                if (!dateFrom || !dateTo) {
-                    e.preventDefault();
-                    alert('Please select both start and end dates.');
-                    return false;
-                }
-                
-                return true;
-            });
-        }
-    }
-    
-    // Initialize settings
-    function initSettings() {
-        if ($('#wpal-settings-form').length) {
-            // Color picker
-            if ($.fn.wpColorPicker) {
-                $('.wpal-color-picker').wpColorPicker();
-            }
-            
-            // Save settings
-            $('#wpal-settings-form').on('submit', function(e) {
-                e.preventDefault();
-                
-                const settings = {
-                    retention_days: $('#retention-days').val(),
-                    log_storage: $('input[name="log-storage"]:checked').val(),
-                    notification_email: $('#notification-email').val(),
-                    notification_events: [],
-                    daily_report: $('#daily-report').is(':checked'),
-                    webhook_url: $('#webhook-url').val(),
-                    severity_colors: {
-                        info: $('#info-color').val(),
-                        warning: $('#warning-color').val(),
-                        error: $('#error-color').val()
-                    },
-                    push_enabled: $('#push-enabled').is(':checked'),
-                    slack_webhook: $('#slack-webhook').val(),
-                    discord_webhook: $('#discord-webhook').val(),
-                    telegram_bot_token: $('#telegram-bot-token').val(),
-                    telegram_chat_id: $('#telegram-chat-id').val()
-                };
-                
-                // Get notification events
-                $('input[name="notification-events[]"]:checked').each(function() {
-                    settings.notification_events.push($(this).val());
-                });
-                
-                // Save settings via AJAX
-                $.ajax({
-                    url: WPAL.ajax_url,
-                    method: 'POST',
-                    data: {
-                        action: 'wpal_save_settings',
-                        nonce: WPAL.settings_nonce,
-                        settings: settings
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            $('#settings-message').html('<div class="notice notice-success is-dismissible"><p>' + response.data + '</p></div>');
-                        } else {
-                            $('#settings-message').html('<div class="notice notice-error is-dismissible"><p>' + response.data + '</p></div>');
-                        }
-                        
-                        // Scroll to message
-                        $('html, body').animate({
-                            scrollTop: $('#settings-message').offset().top - 50
-                        }, 500);
-                    },
-                    error: function() {
-                        $('#settings-message').html('<div class="notice notice-error is-dismissible"><p>An error occurred while saving settings.</p></div>');
-                        
-                        // Scroll to message
-                        $('html, body').animate({
-                            scrollTop: $('#settings-message').offset().top - 50
-                        }, 500);
-                    }
-                });
-            });
-            
-            // Toggle notification settings
-            $('#push-enabled').on('change', function() {
-                if ($(this).is(':checked')) {
-                    $('.push-settings').show();
-                } else {
-                    $('.push-settings').hide();
-                }
-            }).trigger('change');
-            
-            // Toggle integration settings
-            $('.integration-toggle').on('change', function() {
-                const target = $(this).data('target');
-                if ($(this).is(':checked')) {
-                    $(target).show();
-                } else {
-                    $(target).hide();
-                }
-            }).trigger('change');
-        }
-    }
-    
-    // Initialize filters
-    function initFilters() {
-        if ($('#wpal-filter-form').length) {
-            // Date range picker
-            if ($.fn.daterangepicker) {
-                $('#filter-date-range').daterangepicker({
-                    autoUpdateInput: false,
-                    locale: {
-                        cancelLabel: 'Clear',
-                        format: 'YYYY-MM-DD'
-                    }
-                });
-                
-                $('#filter-date-range').on('apply.daterangepicker', function(ev, picker) {
-                    $(this).val(picker.startDate.format('YYYY-MM-DD') + ' - ' + picker.endDate.format('YYYY-MM-DD'));
-                });
-                
-                $('#filter-date-range').on('cancel.daterangepicker', function(ev, picker) {
-                    $(this).val('');
-                });
-            }
-            
-            // Apply filters
-            $('#wpal-filter-form').on('submit', function(e) {
-                e.preventDefault();
-                
-                const filters = {
-                    date_range: $('#filter-date-range').val(),
-                    user: $('#filter-user').val(),
-                    action: $('#filter-action').val(),
-                    severity: $('#filter-severity').val()
-                };
-                
-                // Apply filters to DataTable
-                const table = $('#wpal-logs-table').DataTable();
-                
-                // Clear all filters
-                table.search('').columns().search('').draw();
-                
-                // Apply each filter
-                if (filters.user) {
-                    table.column(2).search(filters.user).draw();
-                }
-                
-                if (filters.action) {
-                    table.column(3).search(filters.action).draw();
-                }
-                
-                if (filters.severity) {
-                    table.column(6).search(filters.severity).draw();
-                }
-                
-                // Date range filtering is more complex and would require custom filtering
-                if (filters.date_range) {
-                    const dates = filters.date_range.split(' - ');
-                    if (dates.length === 2) {
-                        const startDate = new Date(dates[0]);
-                        const endDate = new Date(dates[1]);
-                        
-                        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
-                            const date = new Date(data[0]);
-                            return date >= startDate && date <= endDate;
-                        });
-                        
-                        table.draw();
-                        
-                        // Remove the custom filter
-                        $.fn.dataTable.ext.search.pop();
-                    }
-                }
-            });
-            
-            // Reset filters
-            $('#reset-filters').on('click', function() {
-                $('#wpal-filter-form')[0].reset();
-                $('#wpal-logs-table').DataTable().search('').columns().search('').draw();
-            });
-        }
-    }
-    
-})(jQuery);
 
-// Add the following code to handle dashboard widgets
-jQuery(document).ready(function($) {
-    // Dashboard widgets
+    // Initialize charts
+    function initCharts() {
+        // Activity chart
+        const activityChart = document.getElementById('wpal-activity-chart');
+        if (activityChart) {
+            const chartData = JSON.parse(activityChart.getAttribute('data-chart'));
+            new Chart(activityChart, {
+                type: 'line',
+                data: {
+                    labels: chartData.labels,
+                    datasets: [{
+                        label: 'Activity Logs',
+                        data: chartData.data,
+                        backgroundColor: 'rgba(78, 115, 223, 0.2)',
+                        borderColor: 'rgba(78, 115, 223, 1)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgba(78, 115, 223, 1)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgba(78, 115, 223, 1)',
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    }
+                }
+            });
+        }
+
+        // Severity chart
+        const severityChart = document.getElementById('wpal-severity-chart');
+        if (severityChart) {
+            const chartData = JSON.parse(severityChart.getAttribute('data-chart'));
+            new Chart(severityChart, {
+                type: 'doughnut',
+                data: {
+                    labels: chartData.labels,
+                    datasets: [{
+                        data: chartData.data,
+                        backgroundColor: [
+                            'rgba(28, 200, 138, 0.8)',
+                            'rgba(246, 194, 62, 0.8)',
+                            'rgba(231, 74, 59, 0.8)',
+                            'rgba(78, 115, 223, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgba(28, 200, 138, 1)',
+                            'rgba(246, 194, 62, 1)',
+                            'rgba(231, 74, 59, 1)',
+                            'rgba(78, 115, 223, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    // Load dashboard widgets via AJAX
     function loadDashboardWidgets() {
+        // Recent logs widget
         if ($('#wpal-recent-logs-widget').length) {
             $.ajax({
                 url: ajaxurl,
@@ -493,13 +125,11 @@ jQuery(document).ready(function($) {
                 },
                 success: function(response) {
                     $('#wpal-recent-logs-widget').html(response);
-                },
-                error: function() {
-                    $('#wpal-recent-logs-widget').html('<div class="alert alert-danger">Error loading recent logs.</div>');
                 }
             });
         }
-        
+
+        // Activity chart widget
         if ($('#wpal-activity-chart-widget').length) {
             $.ajax({
                 url: ajaxurl,
@@ -510,13 +140,12 @@ jQuery(document).ready(function($) {
                 },
                 success: function(response) {
                     $('#wpal-activity-chart-widget').html(response);
-                },
-                error: function() {
-                    $('#wpal-activity-chart-widget').html('<div class="alert alert-danger">Error loading activity chart.</div>');
+                    initCharts();
                 }
             });
         }
-        
+
+        // Top users widget
         if ($('#wpal-top-users-widget').length) {
             $.ajax({
                 url: ajaxurl,
@@ -527,13 +156,11 @@ jQuery(document).ready(function($) {
                 },
                 success: function(response) {
                     $('#wpal-top-users-widget').html(response);
-                },
-                error: function() {
-                    $('#wpal-top-users-widget').html('<div class="alert alert-danger">Error loading top users.</div>');
                 }
             });
         }
-        
+
+        // Severity breakdown widget
         if ($('#wpal-severity-breakdown-widget').length) {
             $.ajax({
                 url: ajaxurl,
@@ -544,169 +171,198 @@ jQuery(document).ready(function($) {
                 },
                 success: function(response) {
                     $('#wpal-severity-breakdown-widget').html(response);
-                },
-                error: function() {
-                    $('#wpal-severity-breakdown-widget').html('<div class="alert alert-danger">Error loading severity breakdown.</div>');
+                    initCharts();
                 }
             });
         }
     }
-    
-    // Load dashboard widgets on page load
-    loadDashboardWidgets();
-    
-    // Refresh dashboard widgets
-    $('.wpal-refresh-widget').on('click', function() {
-        var widget = $(this).data('widget');
-        var widgetContainer = $('#wpal-' + widget + '-widget');
-        
-        widgetContainer.html('<div class="wpal-loading"><div class="spinner-border" role="status"><span class="sr-only">Loading...</span></div></div>');
-        
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'wpal_get_' + widget.replace('-', '_'),
-                nonce: wpal_admin_vars.nonce
-            },
-            success: function(response) {
-                widgetContainer.html(response);
-            },
-            error: function() {
-                widgetContainer.html('<div class="alert alert-danger">Error refreshing widget.</div>');
-            }
+
+    // Run diagnostics
+    function runDiagnostics() {
+        $('#wpal-run-diagnostics').on('click', function() {
+            const $button = $(this);
+            const $results = $('#wpal-diagnostics-results');
+            
+            $button.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Running...');
+            
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'wpal_run_diagnostics',
+                    nonce: wpal_admin_vars.nonce
+                },
+                success: function(response) {
+                    $results.html(response);
+                    $button.prop('disabled', false).html('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-activity"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> Run Diagnostics');
+                },
+                error: function() {
+                    $results.html('<div class="wpal-alert wpal-alert-danger">An error occurred while running diagnostics.</div>');
+                    $button.prop('disabled', false).html('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-activity"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> Run Diagnostics');
+                }
+            });
         });
-    });
-    
-    // Diagnostic tools
-    $('#wpal-run-diagnostics').on('click', function() {
-        var resultsContainer = $('#wpal-diagnostics-results');
-        
-        resultsContainer.html('<div class="wpal-loading"><div class="spinner-border" role="status"><span class="sr-only">Loading...</span></div></div>');
-        
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'wpal_run_diagnostics',
-                nonce: wpal_admin_vars.nonce
-            },
-            success: function(response) {
-                var html = '<div class="alert alert-' + (response.status === 'success' ? 'success' : 'danger') + '">' + response.message + '</div>';
-                
-                if (response.details && response.details.length) {
-                    html += '<table class="table table-sm">';
-                    html += '<thead><tr><th>Test</th><th>Status</th><th>Message</th></tr></thead>';
-                    html += '<tbody>';
+    }
+
+    // View log details
+    function viewLogDetails() {
+        $('.wpal-view-log').on('click', function(e) {
+            e.preventDefault();
+            
+            const logId = $(this).data('log-id');
+            
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'wpal_get_log_details',
+                    nonce: wpal_admin_vars.nonce,
+                    log_id: logId
+                },
+                success: function(response) {
+                    // Create modal if it doesn't exist
+                    if (!$('#wpal-log-details-modal').length) {
+                        $('body').append('<div id="wpal-log-details-modal" class="wpal-modal"><div class="wpal-modal-content"><div class="wpal-modal-header"><h3>Log Details</h3><button type="button" class="wpal-modal-close">&times;</button></div><div class="wpal-modal-body"></div><div class="wpal-modal-footer"><button type="button" class="wpal-btn wpal-btn-secondary wpal-modal-close">Close</button></div></div></div>');
+                    }
                     
-                    $.each(response.details, function(i, detail) {
-                        var statusClass = '';
-                        
-                        if (detail.status === 'pass') {
-                            statusClass = 'success';
-                        } else if (detail.status === 'fail') {
-                            statusClass = 'danger';
-                        } else if (detail.status === 'warning') {
-                            statusClass = 'warning';
-                        } else {
-                            statusClass = 'info';
-                        }
-                        
-                        html += '<tr>';
-                        html += '<td>' + detail.test + '</td>';
-                        html += '<td><span class="badge bg-' + statusClass + '">' + detail.status.toUpperCase() + '</span></td>';
-                        html += '<td>' + detail.message + '</td>';
-                        html += '</tr>';
+                    // Set modal content and show
+                    $('#wpal-log-details-modal .wpal-modal-body').html(response);
+                    $('#wpal-log-details-modal').addClass('wpal-modal-show');
+                    
+                    // Close modal on click
+                    $('.wpal-modal-close').on('click', function() {
+                        $('#wpal-log-details-modal').removeClass('wpal-modal-show');
                     });
                     
-                    html += '</tbody></table>';
+                    // Close modal on outside click
+                    $(window).on('click', function(e) {
+                        if ($(e.target).is('#wpal-log-details-modal')) {
+                            $('#wpal-log-details-modal').removeClass('wpal-modal-show');
+                        }
+                    });
                 }
-                
-                resultsContainer.html(html);
-            },
-            error: function() {
-                resultsContainer.html('<div class="alert alert-danger">Error running diagnostics.</div>');
-            }
+            });
         });
-    });
-    
-    $('#wpal-repair-database').on('click', function() {
-        if (!confirm('Are you sure you want to repair the database table? This will recreate the table if it doesn\'t exist.')) {
-            return;
+    }
+
+    // Delete log entry
+    function deleteLogEntry() {
+        $('.wpal-delete-log').on('click', function(e) {
+            e.preventDefault();
+            
+            if (!confirm(wpal_admin_vars.confirm_delete)) {
+                return;
+            }
+            
+            const $row = $(this).closest('tr');
+            const logId = $(this).data('log-id');
+            
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'wpal_delete_log',
+                    nonce: wpal_admin_vars.delete_nonce,
+                    log_id: logId
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $row.fadeOut(300, function() {
+                            $(this).remove();
+                        });
+                    } else {
+                        alert(response.data);
+                    }
+                }
+            });
+        });
+    }
+
+    // Delete all logs
+    function deleteAllLogs() {
+        $('#wpal-delete-all-logs').on('click', function(e) {
+            e.preventDefault();
+            
+            if (!confirm(wpal_admin_vars.confirm_delete_all)) {
+                return;
+            }
+            
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'wpal_delete_all_logs',
+                    nonce: wpal_admin_vars.delete_nonce
+                },
+                success: function(response) {
+                    if (response.success) {
+                        window.location.reload();
+                    } else {
+                        alert(response.data);
+                    }
+                }
+            });
+        });
+    }
+
+    // Export logs
+    function exportLogs() {
+        $('#wpal-export-form').on('submit', function(e) {
+            const format = $('#wpal-export-format').val();
+            const dateFrom = $('#wpal-export-date-from').val();
+            const dateTo = $('#wpal-export-date-to').val();
+            
+            if (!format) {
+                e.preventDefault();
+                alert('Please select an export format.');
+                return false;
+            }
+            
+            if (!dateFrom || !dateTo) {
+                e.preventDefault();
+                alert('Please select a date range.');
+                return false;
+            }
+            
+            return true;
+        });
+    }
+
+    // Initialize on document ready
+    $(document).ready(function() {
+        // Initialize DataTables
+        if ($('#wpal-logs-table').length) {
+            initDataTables();
         }
         
-        var resultsContainer = $('#wpal-diagnostics-results');
+        // Load dashboard widgets
+        loadDashboardWidgets();
         
-        resultsContainer.html('<div class="wpal-loading"><div class="spinner-border" role="status"><span class="sr-only">Loading...</span></div></div>');
+        // Run diagnostics
+        runDiagnostics();
         
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'wpal_repair_database',
-                nonce: wpal_admin_vars.nonce
-            },
-            success: function(response) {
-                resultsContainer.html('<div class="alert alert-' + (response.status === 'success' ? 'success' : 'danger') + '">' + response.message + '</div>');
-            },
-            error: function() {
-                resultsContainer.html('<div class="alert alert-danger">Error repairing database.</div>');
-            }
-        });
-    });
-    
-    $('#wpal-test-rest-api').on('click', function() {
-        var resultsContainer = $('#wpal-diagnostics-results');
+        // View log details
+        viewLogDetails();
         
-        resultsContainer.html('<div class="wpal-loading"><div class="spinner-border" role="status"><span class="sr-only">Loading...</span></div></div>');
+        // Delete log entry
+        deleteLogEntry();
         
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'wpal_test_rest_api',
-                nonce: wpal_admin_vars.nonce
-            },
-            success: function(response) {
-                var html = '<div class="alert alert-' + (response.status === 'success' ? 'success' : 'danger') + '">' + response.message + '</div>';
-                
-                if (response.details) {
-                    html += '<pre>' + JSON.stringify(response.details, null, 2) + '</pre>';
-                }
-                
-                resultsContainer.html(html);
-            },
-            error: function() {
-                resultsContainer.html('<div class="alert alert-danger">Error testing REST API.</div>');
-            }
-        });
-    });
-    
-    $('#wpal-clear-logs').on('click', function() {
-        if (!confirm('Are you sure you want to clear all logs? This action cannot be undone.')) {
-            return;
+        // Delete all logs
+        deleteAllLogs();
+        
+        // Export logs
+        exportLogs();
+        
+        // Initialize tooltips
+        $('[data-toggle="tooltip"]').tooltip();
+        
+        // Initialize date pickers
+        if ($.fn.datepicker) {
+            $('.wpal-datepicker').datepicker({
+                dateFormat: 'yy-mm-dd',
+                maxDate: '0'
+            });
         }
-        
-        var resultsContainer = $('#wpal-diagnostics-results');
-        
-        resultsContainer.html('<div class="wpal-loading"><div class="spinner-border" role="status"><span class="sr-only">Loading...</span></div></div>');
-        
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'wpal_clear_logs',
-                nonce: wpal_admin_vars.nonce
-            },
-            success: function(response) {
-                resultsContainer.html('<div class="alert alert-' + (response.status === 'success' ? 'success' : 'danger') + '">' + response.message + '</div>');
-                
-                // Refresh widgets after clearing logs
-                loadDashboardWidgets();
-            },
-            error: function() {
-                resultsContainer.html('<div class="alert alert-danger">Error clearing logs.</div>');
-            }
-        });
     });
-});
+
+})(jQuery);
