@@ -1,277 +1,242 @@
 <?php
 /**
-* Template for the settings page
-*/
+ * Template for the settings page
+ */
 
 // Exit if accessed directly
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Get current settings
-$retention_days = get_option('wpal_retention_days', 30);
-$log_storage = get_option('wpal_log_storage', 'database');
-$track_404_errors = get_option('wpal_track_404_errors', 1);
-$track_api_requests = get_option('wpal_track_api_requests', 0);
-$notification_email = get_option('wpal_notification_email', get_option('admin_email'));
-$notification_events = get_option('wpal_notification_events', array('failed_login', 'plugin_activation', 'plugin_deactivation'));
-$daily_report = get_option('wpal_daily_report', 0);
+// Get settings
+$settings = get_option('wpal_settings', array());
 
-// Get user roles
-$roles = wp_roles()->get_names();
+// Default values
+$retention_period = isset($settings['retention_period']) ? intval($settings['retention_period']) : 30;
+$notification_email = isset($settings['notification_email']) ? $settings['notification_email'] : get_option('admin_email');
+$notification_events = isset($settings['notification_events']) ? $settings['notification_events'] : array('error');
+$push_notifications = isset($settings['push_notifications']) ? $settings['push_notifications'] : '';
+$push_url = isset($settings['push_url']) ? $settings['push_url'] : '';
+$export_format = isset($settings['export_format']) ? $settings['export_format'] : 'csv';
 
-// Check if form was submitted
-$settings_updated = false;
-if (isset($_POST['wpal_save_settings']) && check_admin_referer('wpal_settings_nonce')) {
-    // Update settings
-    update_option('wpal_retention_days', intval($_POST['wpal_retention_days']));
-    update_option('wpal_log_storage', sanitize_text_field($_POST['wpal_log_storage']));
-    update_option('wpal_track_404_errors', isset($_POST['wpal_track_404_errors']) ? 1 : 0);
-    update_option('wpal_track_api_requests', isset($_POST['wpal_track_api_requests']) ? 1 : 0);
+// Handle form submission
+if (isset($_POST['wpal_save_settings'])) {
+    // Verify nonce
+    check_admin_referer('wpal_settings_nonce');
     
-    // Update notification settings
-    update_option('wpal_notification_email', sanitize_email($_POST['wpal_notification_email']));
-    update_option('wpal_notification_events', isset($_POST['wpal_notification_events']) ? $_POST['wpal_notification_events'] : array());
-    update_option('wpal_daily_report', isset($_POST['wpal_daily_report']) ? 1 : 0);
+    // Sanitize and save settings
+    $settings = array(
+        'retention_period' => isset($_POST['retention_period']) ? intval($_POST['retention_period']) : 30,
+        'notification_email' => isset($_POST['notification_email']) ? sanitize_email($_POST['notification_email']) : get_option('admin_email'),
+        'notification_events' => isset($_POST['notification_events']) ? array_map('sanitize_text_field', $_POST['notification_events']) : array(),
+        'push_notifications' => isset($_POST['push_notifications']) ? 'on' : '',
+        'push_url' => isset($_POST['push_url']) ? esc_url_raw($_POST['push_url']) : '',
+        'export_format' => isset($_POST['export_format']) ? sanitize_text_field($_POST['export_format']) : 'csv'
+    );
     
-    $settings_updated = true;
+    // Save settings
+    update_option('wpal_settings', $settings);
+    
+    // Show success message
+    echo '<div class="notice notice-success is-dismissible"><p>' . __('Settings saved successfully.', 'wp-activity-logger-pro') . '</p></div>';
+    
+    // Update variables
+    $retention_period = $settings['retention_period'];
+    $notification_email = $settings['notification_email'];
+    $notification_events = $settings['notification_events'];
+    $push_notifications = $settings['push_notifications'];
+    $push_url = $settings['push_url'];
+    $export_format = $settings['export_format'];
 }
 ?>
 
-<div class="wrap">
-    <h1><?php _e('Activity Logger Settings', 'wp-activity-logger-pro'); ?></h1>
-    
-    <?php if ($settings_updated) : ?>
-        <div class="notice notice-success is-dismissible">
-            <p><?php _e('Settings saved successfully.', 'wp-activity-logger-pro'); ?></p>
+<div class="wrap wpal-wrap">
+    <div class="wpal-dashboard-header">
+        <h1 class="wpal-dashboard-title"><?php _e('Settings', 'wp-activity-logger-pro'); ?></h1>
+        <div class="wpal-dashboard-actions">
+            <a href="<?php echo admin_url('admin.php?page=wp-activity-logger-pro-dashboard'); ?>" class="wpal-btn wpal-btn-outline-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-bar-chart-2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                <?php _e('Dashboard', 'wp-activity-logger-pro'); ?>
+            </a>
+            <a href="<?php echo admin_url('admin.php?page=wp-activity-logger-pro'); ?>" class="wpal-btn wpal-btn-outline-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-list"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                <?php _e('View Logs', 'wp-activity-logger-pro'); ?>
+            </a>
         </div>
-    <?php endif; ?>
+    </div>
     
-    <form method="post" action="">
-        <?php wp_nonce_field('wpal_settings_nonce'); ?>
-        
-        <div class="metabox-holder">
-            <!-- General Settings -->
-            <div class="postbox">
-                <h2 class="hndle"><span><?php _e('General Settings', 'wp-activity-logger-pro'); ?></span></h2>
-                <div class="inside">
-                    <table class="form-table">
-                        <tr>
-                            <th scope="row">
-                                <label for="wpal_retention_days"><?php _e('Log Retention (days)', 'wp-activity-logger-pro'); ?></label>
-                            </th>
-                            <td>
-                                <input type="number" id="wpal_retention_days" name="wpal_retention_days" value="<?php echo esc_attr($retention_days); ?>" min="1" max="365" class="small-text">
-                                <p class="description"><?php _e('Logs older than this will be automatically deleted.', 'wp-activity-logger-pro'); ?></p>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th scope="row">
-                                <label for="wpal_log_storage"><?php _e('Log Storage', 'wp-activity-logger-pro'); ?></label>
-                            </th>
-                            <td>
-                                <select id="wpal_log_storage" name="wpal_log_storage">
-                                    <option value="database" <?php selected($log_storage, 'database'); ?>><?php _e('Database', 'wp-activity-logger-pro'); ?></option>
-                                    <option value="file" <?php selected($log_storage, 'file'); ?>><?php _e('File', 'wp-activity-logger-pro'); ?></option>
-                                    <option value="both" <?php selected($log_storage, 'both'); ?>><?php _e('Both Database and File', 'wp-activity-logger-pro'); ?></option>
-                                </select>
-                                <p class="description"><?php _e('Where to store activity logs.', 'wp-activity-logger-pro'); ?></p>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th scope="row"><?php _e('Tracking Options', 'wp-activity-logger-pro'); ?></th>
-                            <td>
-                                <fieldset>
-                                    <legend class="screen-reader-text"><span><?php _e('Tracking Options', 'wp-activity-logger-pro'); ?></span></legend>
-                                    <label for="wpal_track_404_errors">
-                                        <input type="checkbox" id="wpal_track_404_errors" name="wpal_track_404_errors" value="1" <?php checked($track_404_errors, 1); ?>>
-                                        <?php _e('Track 404 Errors', 'wp-activity-logger-pro'); ?>
-                                    </label>
-                                    <p class="description"><?php _e('Log 404 (Page Not Found) errors.', 'wp-activity-logger-pro'); ?></p>
-                                    
-                                    <br>
-                                    
-                                    <label for="wpal_track_api_requests">
-                                        <input type="checkbox" id="wpal_track_api_requests" name="wpal_track_api_requests" value="1" <?php checked($track_api_requests, 1); ?>>
-                                        <?php _e('Track API Requests', 'wp-activity-logger-pro'); ?>
-                                    </label>
-                                    <p class="description"><?php _e('Log REST API, AJAX, and XML-RPC requests.', 'wp-activity-logger-pro'); ?></p>
-                                </fieldset>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th scope="row"><?php _e('User Roles to Track', 'wp-activity-logger-pro'); ?></th>
-                            <td>
-                                <fieldset>
-                                    <legend class="screen-reader-text"><span><?php _e('User Roles to Track', 'wp-activity-logger-pro'); ?></span></legend>
-                                    <?php foreach ($roles as $role_key => $role_name) : ?>
-                                        <label for="wpal_track_role_<?php echo esc_attr($role_key); ?>">
-                                            <input type="checkbox" id="wpal_track_role_<?php echo esc_attr($role_key); ?>" name="wpal_track_roles[]" value="<?php echo esc_attr($role_key); ?>" checked>
-                                            <?php echo esc_html($role_name); ?>
-                                        </label><br>
-                                    <?php endforeach; ?>
-                                </fieldset>
-                            </td>
-                        </tr>
-                    </table>
-                    <p class="submit">
-                        <input type="submit" name="wpal_save_settings" class="button button-primary" value="<?php _e('Save Settings', 'wp-activity-logger-pro'); ?>">
-                        <input type="button" name="wpal_reset_settings" class="button" value="<?php _e('Reset to Default', 'wp-activity-logger-pro'); ?>" onclick="if(confirm('<?php _e('Are you sure you want to reset all settings to default?', 'wp-activity-logger-pro'); ?>')) { window.location.href = '<?php echo admin_url('admin.php?page=wp-activity-logger-pro-settings&reset=1'); ?>'; }">
-                    </p>
-                </div>
+    <div class="wpal-widget">
+        <div class="wpal-widget-header">
+            <h3 class="wpal-widget-title">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-settings"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                <?php _e('Plugin Settings', 'wp-activity-logger-pro'); ?>
+            </h3>
+        </div>
+        <div class="wpal-widget-body">
+            <div class="wpal-settings-tabs">
+                <a href="#" class="wpal-settings-tab wpal-active" data-target="general"><?php _e('General', 'wp-activity-logger-pro'); ?></a>
+                <a href="#" class="wpal-settings-tab" data-target="notifications"><?php _e('Notifications', 'wp-activity-logger-pro'); ?></a>
+                <a href="#" class="wpal-settings-tab" data-target="export"><?php _e('Export', 'wp-activity-logger-pro'); ?></a>
+                <a href="#" class="wpal-settings-tab" data-target="advanced"><?php _e('Advanced', 'wp-activity-logger-pro'); ?></a>
             </div>
             
-            <!-- Notification Settings -->
-            <div class="postbox">
-                <h2 class="hndle"><span><?php _e('Notification Settings', 'wp-activity-logger-pro'); ?></span></h2>
-                <div class="inside">
-                    <table class="form-table">
-                        <tr>
-                            <th scope="row">
-                                <label for="wpal_notification_email"><?php _e('Notification Email', 'wp-activity-logger-pro'); ?></label>
-                            </th>
-                            <td>
-                                <input type="email" id="wpal_notification_email" name="wpal_notification_email" value="<?php echo esc_attr($notification_email); ?>" class="regular-text">
-                                <p class="description"><?php _e('Email address to receive notifications.', 'wp-activity-logger-pro'); ?></p>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th scope="row"><?php _e('Notification Events', 'wp-activity-logger-pro'); ?></th>
-                            <td>
-                                <fieldset>
-                                    <legend class="screen-reader-text"><span><?php _e('Notification Events', 'wp-activity-logger-pro'); ?></span></legend>
-                                    <label for="wpal_notify_failed_login">
-                                        <input type="checkbox" id="wpal_notify_failed_login" name="wpal_notification_events[]" value="failed_login" <?php checked(in_array('failed_login', $notification_events), true); ?>>
-                                        <?php _e('Failed Login Attempts', 'wp-activity-logger-pro'); ?>
-                                    </label><br>
-                                    
-                                    <label for="wpal_notify_plugin_activation">
-                                        <input type="checkbox" id="wpal_notify_plugin_activation" name="wpal_notification_events[]" value="plugin_activation" <?php checked(in_array('plugin_activation', $notification_events), true); ?>>
-                                        <?php _e('Plugin Activation', 'wp-activity-logger-pro'); ?>
-                                    </label><br>
-                                    
-                                    <label for="wpal_notify_plugin_deactivation">
-                                        <input type="checkbox" id="wpal_notify_plugin_deactivation" name="wpal_notification_events[]" value="plugin_deactivation" <?php checked(in_array('plugin_deactivation', $notification_events), true); ?>>
-                                        <?php _e('Plugin Deactivation', 'wp-activity-logger-pro'); ?>
-                                    </label><br>
-                                    
-                                    <label for="wpal_notify_theme_switch">
-                                        <input type="checkbox" id="wpal_notify_theme_switch" name="wpal_notification_events[]" value="theme_switch" <?php checked(in_array('theme_switch', $notification_events), true); ?>>
-                                        <?php _e('Theme Switch', 'wp-activity-logger-pro'); ?>
-                                    </label><br>
-                                    
-                                    <label for="wpal_notify_user_registration">
-                                        <input type="checkbox" id="wpal_notify_user_registration" name="wpal_notification_events[]" value="user_registration" <?php checked(in_array('user_registration', $notification_events), true); ?>>
-                                        <?php _e('User Registration', 'wp-activity-logger-pro'); ?>
-                                    </label><br>
-                                    
-                                    <label for="wpal_notify_password_reset">
-                                        <input type="checkbox" id="wpal_notify_password_reset" name="wpal_notification_events[]" value="password_reset" <?php checked(in_array('password_reset', $notification_events), true); ?>>
-                                        <?php _e('Password Reset', 'wp-activity-logger-pro'); ?>
-                                    </label>
-                                </fieldset>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th scope="row"><?php _e('Daily Report', 'wp-activity-logger-pro'); ?></th>
-                            <td>
-                                <fieldset>
-                                    <legend class="screen-reader-text"><span><?php _e('Daily Report', 'wp-activity-logger-pro'); ?></span></legend>
-                                    <label for="wpal_daily_report">
-                                        <input type="checkbox" id="wpal_daily_report" name="wpal_daily_report" value="1" <?php checked($daily_report, 1); ?>>
-                                        <?php _e('Send Daily Activity Report', 'wp-activity-logger-pro'); ?>
-                                    </label>
-                                    <p class="description"><?php _e('Receive a daily summary of all activity.', 'wp-activity-logger-pro'); ?></p>
-                                </fieldset>
-                            </td>
-                        </tr>
-                    </table>
-                    <p class="submit">
-                        <input type="submit" name="wpal_save_settings" class="button button-primary" value="<?php _e('Save Notification Settings', 'wp-activity-logger-pro'); ?>">
-                    </p>
+            <form method="post" action="">
+                <?php wp_nonce_field('wpal_settings_nonce'); ?>
+                
+                <div id="general" class="wpal-settings-content wpal-active">
+                    <div class="wpal-settings-section">
+                        <h3 class="wpal-settings-section-title"><?php _e('Log Retention', 'wp-activity-logger-pro'); ?></h3>
+                        <p class="wpal-settings-description"><?php _e('Configure how long logs should be kept in the database.', 'wp-activity-logger-pro'); ?></p>
+                        
+                        <div class="wpal-form-group">
+                            <label for="retention_period" class="wpal-form-label"><?php _e('Retention Period (days)', 'wp-activity-logger-pro'); ?></label>
+                            <input type="number" name="retention_period" id="retention_period" class="wpal-form-control" value="<?php echo esc_attr($retention_period); ?>" min="0">
+                            <p class="description"><?php _e('Set to 0 to keep logs indefinitely.', 'wp-activity-logger-pro'); ?></p>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            
-            <!-- Integration Settings -->
-            <div class="postbox">
-                <h2 class="hndle"><span><?php _e('Integration Settings', 'wp-activity-logger-pro'); ?></span></h2>
-                <div class="inside">
-                    <table class="form-table">
-                        <tr>
-                            <th scope="row">
-                                <label for="wpal_slack_webhook"><?php _e('Slack Webhook URL', 'wp-activity-logger-pro'); ?></label>
-                            </th>
-                            <td>
-                                <input type="url" id="wpal_slack_webhook" name="wpal_slack_webhook" value="" class="regular-text">
-                                <p class="description"><?php _e('Send log notifications to Slack.', 'wp-activity-logger-pro'); ?></p>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th scope="row">
-                                <label for="wpal_discord_webhook"><?php _e('Discord Webhook URL', 'wp-activity-logger-pro'); ?></label>
-                            </th>
-                            <td>
-                                <input type="url" id="wpal_discord_webhook" name="wpal_discord_webhook" value="" class="regular-text">
-                                <p class="description"><?php _e('Send log notifications to Discord.', 'wp-activity-logger-pro'); ?></p>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th scope="row">
-                                <label for="wpal_telegram_bot_token"><?php _e('Telegram Bot Token', 'wp-activity-logger-pro'); ?></label>
-                            </th>
-                            <td>
-                                <input type="text" id="wpal_telegram_bot_token" name="wpal_telegram_bot_token" value="" class="regular-text">
-                                <p class="description"><?php _e('Your Telegram Bot Token.', 'wp-activity-logger-pro'); ?></p>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th scope="row">
-                                <label for="wpal_telegram_chat_id"><?php _e('Telegram Chat ID', 'wp-activity-logger-pro'); ?></label>
-                            </th>
-                            <td>
-                                <input type="text" id="wpal_telegram_chat_id" name="wpal_telegram_chat_id" value="" class="regular-text">
-                                <p class="description"><?php _e('Telegram Chat ID to send notifications to.', 'wp-activity-logger-pro'); ?></p>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th scope="row"><?php _e('Browser Push Notifications', 'wp-activity-logger-pro'); ?></th>
-                            <td>
-                                <fieldset>
-                                    <legend class="screen-reader-text"><span><?php _e('Browser Push Notifications', 'wp-activity-logger-pro'); ?></span></legend>
-                                    <label for="wpal_browser_push">
-                                        <input type="checkbox" id="wpal_browser_push" name="wpal_browser_push" value="1">
-                                        <?php _e('Enable Browser Push Notifications', 'wp-activity-logger-pro'); ?>
-                                    </label>
-                                    <p class="description"  ?>
-                                    </label>
-                                    <p class="description"><?php _e('Send push notifications to browser.', 'wp-activity-logger-pro'); ?></p>
-                                </fieldset>
-                            </td>
-                        </tr>
-                    </table>
-                    <p class="submit">
-                        <input type="submit" name="wpal_save_settings" class="button button-primary" value="<?php _e('Save Integration Settings', 'wp-activity-logger-pro'); ?>">
-                    </p>
+                
+                <div id="notifications" class="wpal-settings-content">
+                    <div class="wpal-settings-section">
+                        <h3 class="wpal-settings-section-title"><?php _e('Email Notifications', 'wp-activity-logger-pro'); ?></h3>
+                        <p class="wpal-settings-description"><?php _e('Configure email notifications for important events.', 'wp-activity-logger-pro'); ?></p>
+                        
+                        <div class="wpal-form-group">
+                            <label for="notification_email" class="wpal-form-label"><?php _e('Notification Email', 'wp-activity-logger-pro'); ?></label>
+                            <input type="email" name="notification_email" id="notification_email" class="wpal-form-control" value="<?php echo esc_attr($notification_email); ?>">
+                        </div>
+                        
+                        <div class="wpal-form-group">
+                            <label class="wpal-form-label"><?php _e('Notify On', 'wp-activity-logger-pro'); ?></label>
+                            <div>
+                                <label>
+                                    <input type="checkbox" name="notification_events[]" value="error" <?php checked(in_array('error', $notification_events)); ?>>
+                                    <?php _e('Errors', 'wp-activity-logger-pro'); ?>
+                                </label>
+                            </div>
+                            <div>
+                                <label>
+                                    <input type="checkbox" name="notification_events[]" value="warning" <?php checked(in_array('warning', $notification_events)); ?>>
+                                    <?php _e('Warnings', 'wp-activity-logger-pro'); ?>
+                                </label>
+                            </div>
+                            <div>
+                                <label>
+                                    <input type="checkbox" name="notification_events[]" value="info" <?php checked(in_array('info', $notification_events)); ?>>
+                                    <?php _e('Info', 'wp-activity-logger-pro'); ?>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="wpal-settings-section">
+                        <h3 class="wpal-settings-section-title"><?php _e('Push Notifications', 'wp-activity-logger-pro'); ?></h3>
+                        <p class="wpal-settings-description"><?php _e('Configure push notifications to external services.', 'wp-activity-logger-pro'); ?></p>
+                        
+                        <div class="wpal-form-group">
+                            <label>
+                                <input type="checkbox" name="push_notifications" <?php checked($push_notifications, 'on'); ?>>
+                                <?php _e('Enable Push Notifications', 'wp-activity-logger-pro'); ?>
+                            </label>
+                        </div>
+                        
+                        <div class="wpal-form-group">
+                            <label for="push_url" class="wpal-form-label"><?php _e('Webhook URL', 'wp-activity-logger-pro'); ?></label>
+                            <input type="url" name="push_url" id="push_url" class="wpal-form-control" value="<?php echo esc_attr($push_url); ?>">
+                            <p class="description"><?php _e('Enter the webhook URL to send notifications to.', 'wp-activity-logger-pro'); ?></p>
+                        </div>
+                    </div>
                 </div>
-            </div>
+                
+                <div id="export" class="wpal-settings-content">
+                    <div class="wpal-settings-section">
+                        <h3 class="wpal-settings-section-title"><?php _e('Export Settings', 'wp-activity-logger-pro'); ?></h3>
+                        <p class="wpal-settings-description"><?php _e('Configure default export settings.', 'wp-activity-logger-pro'); ?></p>
+                        
+                        <div class="wpal-form-group">
+                            <label for="export_format" class="wpal-form-label"><?php _e('Default Export Format', 'wp-activity-logger-pro'); ?></label>
+                            <select name="export_format" id="export_format" class="wpal-form-control">
+                                <option value="csv" <?php selected($export_format, 'csv'); ?>><?php _e('CSV', 'wp-activity-logger-pro'); ?></option>
+                                <option value="json" <?php selected($export_format, 'json'); ?>><?php _e('JSON', 'wp-activity-logger-pro'); ?></option>
+                                <option value="xml" <?php selected($export_format, 'xml'); ?>><?php _e('XML', 'wp-activity-logger-pro'); ?></option>
+                                <option value="pdf" <?php selected($export_format, 'pdf'); ?>><?php _e('PDF', 'wp-activity-logger-pro'); ?></option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="advanced" class="wpal-settings-content">
+                    <div class="wpal-settings-section">
+                        <h3 class="wpal-settings-section-title"><?php _e('Advanced Settings', 'wp-activity-logger-pro'); ?></h3>
+                        <p class="wpal-settings-description"><?php _e('Configure advanced plugin settings.', 'wp-activity-logger-pro'); ?></p>
+                        
+                        <div class="wpal-alert wpal-alert-warning">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-alert-triangle"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                            <div>
+                                <p><?php _e('These settings are for advanced users only. Changing these settings may affect the performance of your website.', 'wp-activity-logger-pro'); ?></p>
+                            </div>
+                        </div>
+                        
+                        <div class="wpal-form-group">
+                            <button type="button" id="wpal-reset-settings" class="wpal-btn wpal-btn-danger">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-refresh-cw"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                                <?php _e('Reset Settings', 'wp-activity-logger-pro'); ?>
+                            </button>
+                            <p class="description"><?php _e('Reset all settings to default values.', 'wp-activity-logger-pro'); ?></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="wpal-form-group">
+                    <button type="submit" name="wpal_save_settings" class="wpal-btn wpal-btn-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-save"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                        <?php _e('Save Settings', 'wp-activity-logger-pro'); ?>
+                    </button>
+                </div>
+            </form>
         </div>
-    </form>
+    </div>
 </div>
 
 <script>
 jQuery(document).ready(function($) {
-    // Toggle settings sections
-    $('.hndle').click(function() {
-        $(this).parent().toggleClass('closed');
+    // Handle settings tabs
+    $('.wpal-settings-tab').on('click', function(e) {
+        e.preventDefault();
+        
+        const target = $(this).data('target');
+        
+        // Update active tab
+        $('.wpal-settings-tab').removeClass('wpal-active');
+        $(this).addClass('wpal-active');
+        
+        // Show target tab content
+        $('.wpal-settings-content').removeClass('wpal-active');
+        $('#' + target).addClass('wpal-active');
+    });
+    
+    // Handle reset settings
+    $('#wpal-reset-settings').on('click', function() {
+        if (confirm('<?php _e('Are you sure you want to reset all settings to default values? This action cannot be undone.', 'wp-activity-logger-pro'); ?>')) {
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'wpal_reset_settings',
+                    nonce: wpal_admin_vars.nonce
+                },
+                success: function(response) {
+                    if (response.success) {
+                        window.location.reload();
+                    } else {
+                        alert(response.data);
+                    }
+                },
+                error: function() {
+                    alert('<?php _e('An error occurred while resetting settings.', 'wp-activity-logger-pro'); ?>');
+                }
+            });
+        }
     });
 });
 </script>
-
-<?php
-// Add footer text
-$plugin_data = get_plugin_data(WPAL_PLUGIN_FILE);
-$plugin_version = $plugin_data['Version'];
-?>
-<div class="wpal-footer">
-    <p><?php printf(__('Thank you for creating with %s.', 'wp-activity-logger-pro'), '<a href="https://wordpress.org/">WordPress</a>'); ?> <span class="wpal-version"><?php printf(__('Version %s', 'wp-activity-logger-pro'), $plugin_version); ?></span></p>
-</div>
