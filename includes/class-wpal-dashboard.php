@@ -10,240 +10,161 @@ if (!defined('ABSPATH')) {
 
 class WPAL_Dashboard {
     /**
-     * Initialize the dashboard
+     * Constructor
      */
-    public static function init() {
-        // Register AJAX handlers for dashboard widgets
-        add_action('wp_ajax_wpal_get_recent_logs', array(__CLASS__, 'ajax_get_recent_logs'));
-        add_action('wp_ajax_wpal_get_activity_chart', array(__CLASS__, 'ajax_get_activity_chart'));
-        add_action('wp_ajax_wpal_get_top_users', array(__CLASS__, 'ajax_get_top_users'));
-        add_action('wp_ajax_wpal_get_severity_breakdown', array(__CLASS__, 'ajax_get_severity_breakdown'));
+    public function __construct() {
+        // Schedule cleanup
+        if (!wp_next_scheduled('wpal_cleanup_logs')) {
+            wp_schedule_event(time(), 'daily', 'wpal_cleanup_logs');
+        }
+        
+        // Add cleanup action
+        add_action('wpal_cleanup_logs', array('WPAL_Helpers', 'clean_old_logs'));
     }
-    
+
     /**
-     * AJAX handler for recent logs widget
+     * Add admin menu
      */
-    public static function ajax_get_recent_logs() {
-        // Check nonce
-        check_ajax_referer('wpal_nonce', 'nonce');
+    public function add_admin_menu() {
+        // Main menu
+        add_menu_page(
+            __('Activity Logger', 'wp-activity-logger-pro'),
+            __('Activity Logger', 'wp-activity-logger-pro'),
+            'manage_options',
+            'wp-activity-logger-pro',
+            array($this, 'render_logs_page'),
+            'dashicons-list-view',
+            30
+        );
         
-        // Check permissions
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(__('You do not have permission to perform this action.', 'wp-activity-logger-pro'));
-        }
+        // Logs submenu
+        add_submenu_page(
+            'wp-activity-logger-pro',
+            __('Activity Logs', 'wp-activity-logger-pro'),
+            __('Activity Logs', 'wp-activity-logger-pro'),
+            'manage_options',
+            'wp-activity-logger-pro',
+            array($this, 'render_logs_page')
+        );
         
-        global $wpdb;
-        WPAL_Helpers::init();
+        // Dashboard submenu
+        add_submenu_page(
+            'wp-activity-logger-pro',
+            __('Dashboard', 'wp-activity-logger-pro'),
+            __('Dashboard', 'wp-activity-logger-pro'),
+            'manage_options',
+            'wp-activity-logger-pro-dashboard',
+            array($this, 'render_dashboard_page')
+        );
         
-        // Get recent logs
-        $recent_logs = $wpdb->get_results("SELECT * FROM " . WPAL_Helpers::$db_table . " ORDER BY time DESC LIMIT 10");
+        // Export submenu
+        add_submenu_page(
+            'wp-activity-logger-pro',
+            __('Export', 'wp-activity-logger-pro'),
+            __('Export', 'wp-activity-logger-pro'),
+            'manage_options',
+            'wp-activity-logger-pro-export',
+            array($this, 'render_export_page')
+        );
         
-        ob_start();
+        // Settings submenu
+        add_submenu_page(
+            'wp-activity-logger-pro',
+            __('Settings', 'wp-activity-logger-pro'),
+            __('Settings', 'wp-activity-logger-pro'),
+            'manage_options',
+            'wp-activity-logger-pro-settings',
+            array($this, 'render_settings_page')
+        );
         
-        if (empty($recent_logs)) {
-            ?>
-            <div class="wpal-alert wpal-alert-info">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                <?php _e('No recent logs found.', 'wp-activity-logger-pro'); ?>
-            </div>
-            <?php
-        } else {
-            ?>
-            <div class="wpal-table-responsive">
-                <table class="wpal-table">
-                    <thead>
-                        <tr>
-                            <th><?php _e('Time', 'wp-activity-logger-pro'); ?></th>
-                            <th><?php _e('User', 'wp-activity-logger-pro'); ?></th>
-                            <th><?php _e('Action', 'wp-activity-logger-pro'); ?></th>
-                            <th><?php _e('Severity', 'wp-activity-logger-pro'); ?></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($recent_logs as $log) : ?>
-                            <tr>
-                                <td><?php echo WPAL_Helpers::format_datetime($log->time); ?></td>
-                                <td><?php echo esc_html($log->username); ?></td>
-                                <td><?php echo esc_html($log->action); ?></td>
-                                <td>
-                                    <?php 
-                                    $severity_class = '';
-                                    switch ($log->severity) {
-                                        case 'info':
-                                            $severity_class = 'success';
-                                            break;
-                                        case 'warning':
-                                            $severity_class = 'warning';
-                                            break;
-                                        case 'error':
-                                            $severity_class = 'danger';
-                                            break;
-                                        default:
-                                            $severity_class = 'info';
-                                    }
-                                    ?>
-                                    <span class="wpal-badge wpal-badge-<?php echo $severity_class; ?>"><?php echo esc_html(ucfirst($log->severity)); ?></span>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-            <div class="wpal-widget-footer">
-                <a href="<?php echo admin_url('admin.php?page=wp-activity-logger-pro'); ?>" class="wpal-btn wpal-btn-outline wpal-btn-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-list"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-                    <?php _e('View All Logs', 'wp-activity-logger-pro'); ?>
-                </a>
-            </div>
-            <?php
-        }
-        
-        $html = ob_get_clean();
-        echo $html;
-        wp_die();
+        // Diagnostics submenu
+        add_submenu_page(
+            'wp-activity-logger-pro',
+            __('Diagnostics', 'wp-activity-logger-pro'),
+            __('Diagnostics', 'wp-activity-logger-pro'),
+            'manage_options',
+            'wp-activity-logger-pro-diagnostics',
+            array($this, 'render_diagnostics_page')
+        );
     }
-    
+
     /**
-     * AJAX handler for activity chart widget
+     * Render logs page
      */
-    public static function ajax_get_activity_chart() {
-        // Check nonce
-        check_ajax_referer('wpal_nonce', 'nonce');
-        
-        // Check permissions
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(__('You do not have permission to perform this action.', 'wp-activity-logger-pro'));
-        }
-        
-        WPAL_Helpers::init();
-        
-        // Get activity over time
-        $activity_data = WPAL_Helpers::get_activity_over_time(7);
-        
-        // Prepare chart data
-        $chart_labels = array_keys($activity_data);
-        $chart_data = array_values($activity_data);
-        
-        $chart_json = json_encode([
-            'labels' => $chart_labels,
-            'data' => $chart_data
-        ]);
-        
-        ob_start();
-        ?>
-        <div class="wpal-chart-container">
-            <canvas id="wpal-activity-chart" data-chart='<?php echo esc_attr($chart_json); ?>'></canvas>
-        </div>
-        <?php
-        $html = ob_get_clean();
-        echo $html;
-        wp_die();
+    public function render_logs_page() {
+        include WPAL_PLUGIN_DIR . 'templates/logs.php';
     }
-    
+
     /**
-     * AJAX handler for top users widget
+     * Render dashboard page
      */
-    public static function ajax_get_top_users() {
-        // Check nonce
-        check_ajax_referer('wpal_nonce', 'nonce');
-        
-        // Check permissions
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(__('You do not have permission to perform this action.', 'wp-activity-logger-pro'));
-        }
-        
-        WPAL_Helpers::init();
-        
-        // Get top users
-        $top_users = WPAL_Helpers::get_top_users(5);
-        
-        ob_start();
-        
-        if (empty($top_users)) {
-            ?>
-            <div class="wpal-alert wpal-alert-info">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                <?php _e('No user activity found.', 'wp-activity-logger-pro'); ?>
-            </div>
-            <?php
-        } else {
-            ?>
-            <div class="wpal-table-responsive">
-                <table class="wpal-table">
-                    <thead>
-                        <tr>
-                            <th><?php _e('User', 'wp-activity-logger-pro'); ?></th>
-                            <th class="wpal-text-right"><?php _e('Activity Count', 'wp-activity-logger-pro'); ?></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($top_users as $user) : ?>
-                            <tr>
-                                <td><?php echo esc_html($user->username); ?></td>
-                                <td class="wpal-text-right"><?php echo number_format($user->count); ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-            <?php
-        }
-        
-        $html = ob_get_clean();
-        echo $html;
-        wp_die();
+    public function render_dashboard_page() {
+        include WPAL_PLUGIN_DIR . 'templates/dashboard.php';
     }
-    
+
     /**
-     * AJAX handler for severity breakdown widget
+     * Render export page
      */
-    public static function ajax_get_severity_breakdown() {
-        // Check nonce
-        check_ajax_referer('wpal_nonce', 'nonce');
-        
-        // Check permissions
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(__('You do not have permission to perform this action.', 'wp-activity-logger-pro'));
+    public function render_export_page() {
+        include WPAL_PLUGIN_DIR . 'templates/export.php';
+    }
+
+    /**
+     * Render settings page
+     */
+    public function render_settings_page() {
+        include WPAL_PLUGIN_DIR . 'templates/settings.php';
+    }
+
+    /**
+     * Render diagnostics page
+     */
+    public function render_diagnostics_page() {
+        include WPAL_PLUGIN_DIR . 'templates/diagnostics.php';
+    }
+
+    /**
+     * Enqueue admin scripts and styles
+     */
+    public function enqueue_admin_scripts($hook) {
+        // Only load on plugin pages
+        if (strpos($hook, 'wp-activity-logger-pro') === false) {
+            return;
         }
         
-        WPAL_Helpers::init();
+        // Enqueue styles
+        wp_enqueue_style('wpal-admin', WPAL_PLUGIN_URL . 'assets/css/wpal-admin.css', array(), WPAL_VERSION);
         
-        // Get severity breakdown
-        $severity_breakdown = WPAL_Helpers::get_severity_breakdown();
+        // Enqueue scripts
+        wp_enqueue_script('wpal-admin', WPAL_PLUGIN_URL . 'assets/js/wpal-admin.js', array('jquery'), WPAL_VERSION, true);
         
-        // Prepare severity chart data
-        $severity_labels = [];
-        $severity_data = [];
+        // Localize script
+        wp_localize_script('wpal-admin', 'wpal_admin_vars', array(
+            'nonce' => wp_create_nonce('wpal_nonce'),
+            'delete_nonce' => wp_create_nonce('wpal_delete_nonce'),
+            'confirm_delete' => __('Are you sure you want to delete this log entry?', 'wp-activity-logger-pro'),
+            'confirm_delete_all' => __('Are you sure you want to delete all log entries? This action cannot be undone.', 'wp-activity-logger-pro'),
+            'ajax_url' => admin_url('admin-ajax.php')
+        ));
         
-        foreach ($severity_breakdown as $severity) {
-            $severity_labels[] = ucfirst($severity->severity);
-            $severity_data[] = (int) $severity->count;
-        }
+        // Enqueue jQuery UI for datepicker
+        wp_enqueue_script('jquery-ui-datepicker');
+        wp_enqueue_style('jquery-ui', 'https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css');
         
-        $severity_chart_json = json_encode([
-            'labels' => $severity_labels,
-            'data' => $severity_data
-        ]);
+        // Enqueue DataTables
+        wp_enqueue_style('datatables', 'https://cdn.datatables.net/1.11.5/css/jquery.dataTables.min.css');
+        wp_enqueue_script('datatables', 'https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js', array('jquery'), '1.11.5', true);
         
-        ob_start();
+        // Enqueue DataTables Buttons
+        wp_enqueue_style('datatables-buttons', 'https://cdn.datatables.net/buttons/2.2.2/css/buttons.dataTables.min.css');
+        wp_enqueue_script('datatables-buttons', 'https://cdn.datatables.net/buttons/2.2.2/js/dataTables.buttons.min.js', array('datatables'), '2.2.2', true);
+        wp_enqueue_script('datatables-buttons-html5', 'https://cdn.datatables.net/buttons/2.2.2/js/buttons.html5.min.js', array('datatables-buttons'), '2.2.2', true);
+        wp_enqueue_script('datatables-buttons-print', 'https://cdn.datatables.net/buttons/2.2.2/js/buttons.print.min.js', array('datatables-buttons'), '2.2.2', true);
+        wp_enqueue_script('jszip', 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js', array(), '3.1.3', true);
+        wp_enqueue_script('pdfmake', 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/pdfmake.min.js', array(), '0.1.53', true);
+        wp_enqueue_script('pdfmake-fonts', 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/vfs_fonts.js', array('pdfmake'), '0.1.53', true);
         
-        if (empty($severity_breakdown)) {
-            ?>
-            <div class="wpal-alert wpal-alert-info">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                <?php _e('No severity data found.', 'wp-activity-logger-pro'); ?>
-            </div>
-            <?php
-        } else {
-            ?>
-            <div class="wpal-chart-container">
-                <canvas id="wpal-severity-chart" data-chart='<?php echo esc_attr($severity_chart_json); ?>'></canvas>
-            </div>
-            <?php
-        }
-        
-        $html = ob_get_clean();
-        echo $html;
-        wp_die();
+        // Enqueue Chart.js
+        wp_enqueue_script('chartjs', 'https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js', array(), '3.7.1', true);
     }
 }
