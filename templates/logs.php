@@ -1,447 +1,365 @@
 <?php
 /**
- * Template for the logs page
- */
+* Template for the logs page
+*/
 
 // Exit if accessed directly
 if (!defined('ABSPATH')) {
     exit;
 }
 
+// Get logs
 global $wpdb;
 WPAL_Helpers::init();
+$table_name = WPAL_Helpers::$db_table;
 
-// Get pagination parameters
-$page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
-$per_page = 20;
-$offset = ($page - 1) * $per_page;
-
-// Get filter parameters
-$user_filter = isset($_GET['user']) ? sanitize_text_field($_GET['user']) : '';
-$action_filter = isset($_GET['action']) ? sanitize_text_field($_GET['action']) : '';
-$severity_filter = isset($_GET['severity']) ? sanitize_text_field($_GET['severity']) : '';
-$date_from = isset($_GET['date_from']) ? sanitize_text_field($_GET['date_from']) : '';
-$date_to = isset($_GET['date_to']) ? sanitize_text_field($_GET['date_to']) : '';
+// Get filters
+$filter_user = isset($_GET['user']) ? sanitize_text_field($_GET['user']) : '';
+$filter_action = isset($_GET['action']) ? sanitize_text_field($_GET['action']) : '';
+$filter_severity = isset($_GET['severity']) ? sanitize_text_field($_GET['severity']) : '';
+$filter_date_from = isset($_GET['date_from']) ? sanitize_text_field($_GET['date_from']) : '';
+$filter_date_to = isset($_GET['date_to']) ? sanitize_text_field($_GET['date_to']) : '';
 
 // Build query
-$where = [];
-$where_values = [];
+$query = "SELECT * FROM $table_name WHERE 1=1";
+$query_args = array();
 
-if (!empty($user_filter)) {
-    $where[] = "username LIKE %s";
-    $where_values[] = '%' . $wpdb->esc_like($user_filter) . '%';
+if ($filter_user) {
+    $query .= " AND username LIKE %s";
+    $query_args[] = '%' . $wpdb->esc_like($filter_user) . '%';
 }
 
-if (!empty($action_filter)) {
-    $where[] = "action LIKE %s";
-    $where_values[] = '%' . $wpdb->esc_like($action_filter) . '%';
+if ($filter_action) {
+    $query .= " AND action LIKE %s";
+    $query_args[] = '%' . $wpdb->esc_like($filter_action) . '%';
 }
 
-if (!empty($severity_filter)) {
-    $where[] = "severity = %s";
-    $where_values[] = $severity_filter;
+if ($filter_severity) {
+    $query .= " AND severity = %s";
+    $query_args[] = $filter_severity;
 }
 
-if (!empty($date_from)) {
-    $where[] = "time >= %s";
-    $where_values[] = $date_from . ' 00:00:00';
+if ($filter_date_from) {
+    $query .= " AND time >= %s";
+    $query_args[] = $filter_date_from . ' 00:00:00';
 }
 
-if (!empty($date_to)) {
-    $where[] = "time <= %s";
-    $where_values[] = $date_to . ' 23:59:59';
+if ($filter_date_to) {
+    $query .= " AND time <= %s";
+    $query_args[] = $filter_date_to . ' 23:59:59';
 }
 
-$where_clause = !empty($where) ? "WHERE " . implode(" AND ", $where) : "";
-
-// Count total items
-$count_query = "SELECT COUNT(*) FROM " . WPAL_Helpers::$db_table . " " . $where_clause;
-if (!empty($where_values)) {
-    $count_query = $wpdb->prepare($count_query, $where_values);
+// Prepare query if there are arguments
+if (!empty($query_args)) {
+    $query = $wpdb->prepare($query, $query_args);
 }
-$total_items = $wpdb->get_var($count_query);
 
 // Get logs
-$query = "SELECT * FROM " . WPAL_Helpers::$db_table . " " . $where_clause . " ORDER BY time DESC LIMIT %d OFFSET %d";
-$query_args = array_merge($where_values, [$per_page, $offset]);
-$logs = $wpdb->get_results($wpdb->prepare($query, $query_args));
+$logs = $wpdb->get_results($query);
 
-// Get unique users, actions, and severities for filters
-$users = $wpdb->get_col("SELECT DISTINCT username FROM " . WPAL_Helpers::$db_table . " ORDER BY username ASC");
-$actions = $wpdb->get_col("SELECT DISTINCT action FROM " . WPAL_Helpers::$db_table . " ORDER BY action ASC");
-$severities = $wpdb->get_col("SELECT DISTINCT severity FROM " . WPAL_Helpers::$db_table . " ORDER BY severity ASC");
-
-// Calculate pagination
-$total_pages = ceil($total_items / $per_page);
-$base_url = admin_url('admin.php?page=wp-activity-logger-pro');
-
-// Add filter parameters to pagination URL
-if (!empty($user_filter)) {
-    $base_url .= '&user=' . urlencode($user_filter);
-}
-
-if (!empty($action_filter)) {
-    $base_url .= '&action=' . urlencode($action_filter);
-}
-
-if (!empty($severity_filter)) {
-    $base_url .= '&severity=' . urlencode($severity_filter);
-}
-
-if (!empty($date_from)) {
-    $base_url .= '&date_from=' . urlencode($date_from);
-}
-
-if (!empty($date_to)) {
-    $base_url .= '&date_to=' . urlencode($date_to);
-}
+// Get unique users and actions for filters
+$users = $wpdb->get_col("SELECT DISTINCT username FROM $table_name ORDER BY username ASC");
+$actions = $wpdb->get_col("SELECT DISTINCT action FROM $table_name ORDER BY action ASC");
 ?>
 
 <div class="wrap wpal-wrap">
-    <h1 class="wp-heading-inline"><?php _e('Activity Logs', 'wp-activity-logger-pro'); ?></h1>
-    
-    <div class="wpal-card">
-        <div class="wpal-card-header">
-            <h2 class="wpal-card-title">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-filter"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-                <?php _e('Filter Logs', 'wp-activity-logger-pro'); ?>
-            </h2>
+    <div class="wpal-dashboard-header">
+        <h1 class="wpal-dashboard-title"><?php _e('Activity Logs', 'wp-activity-logger-pro'); ?></h1>
+        <div class="wpal-dashboard-actions">
+            <a href="<?php echo admin_url('admin.php?page=wp-activity-logger-pro-dashboard'); ?>" class="wpal-btn wpal-btn-outline-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-bar-chart-2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                <?php _e('Dashboard', 'wp-activity-logger-pro'); ?>
+            </a>
+            <a href="<?php echo admin_url('admin.php?page=wp-activity-logger-pro-export'); ?>" class="wpal-btn wpal-btn-outline-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-download"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <?php _e('Export', 'wp-activity-logger-pro'); ?>
+            </a>
+            <button id="wpal-delete-all-logs" class="wpal-btn wpal-btn-outline-danger">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-trash-2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                <?php _e('Delete All', 'wp-activity-logger-pro'); ?>
+            </button>
         </div>
-        <div class="wpal-card-body">
-            <form method="get" action="<?php echo admin_url('admin.php'); ?>">
+    </div>
+    
+    <div class="wpal-widget wpal-mb-4">
+        <div class="wpal-widget-header">
+            <h3 class="wpal-widget-title">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-filter"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                <?php _e('Filter Logs', 'wp-activity-logger-pro'); ?>
+            </h3>
+        </div>
+        <div class="wpal-widget-body">
+            <form method="get" action="<?php echo admin_url('admin.php'); ?>" class="wpal-d-flex wpal-flex-wrap">
                 <input type="hidden" name="page" value="wp-activity-logger-pro">
                 
-                <div class="wpal-filter-section">
-                    <div class="wpal-form-group">
-                        <label for="date_from" class="wpal-form-label"><?php _e('Date From', 'wp-activity-logger-pro'); ?></label>
-                        <input type="date" id="date_from" name="date_from" class="wpal-form-control" value="<?php echo esc_attr($date_from); ?>">
-                    </div>
-                    
-                    <div class="wpal-form-group">
-                        <label for="date_to" class="wpal-form-label"><?php _e('Date To', 'wp-activity-logger-pro'); ?></label>
-                        <input type="date" id="date_to" name="date_to" class="wpal-form-control" value="<?php echo esc_attr($date_to); ?>">
-                    </div>
-                    
-                    <div class="wpal-form-group">
-                        <label for="user" class="wpal-form-label"><?php _e('User', 'wp-activity-logger-pro'); ?></label>
-                        <select id="user" name="user" class="wpal-form-select">
-                            <option value=""><?php _e('All Users', 'wp-activity-logger-pro'); ?></option>
-                            <?php foreach ($users as $user) : ?>
-                                <option value="<?php echo esc_attr($user); ?>" <?php selected($user_filter, $user); ?>><?php echo esc_html($user); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    
-                    <div class="wpal-form-group">
-                        <label for="action" class="wpal-form-label"><?php _e('Action', 'wp-activity-logger-pro'); ?></label>
-                        <select id="action" name="action" class="wpal-form-select">
-                            <option value=""><?php _e('All Actions', 'wp-activity-logger-pro'); ?></option>
-                            <?php foreach ($actions as $action) : ?>
-                                <option value="<?php echo esc_attr($action); ?>" <?php selected($action_filter, $action); ?>><?php echo esc_html($action); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    
-                    <div class="wpal-form-group">
-                        <label for="severity" class="wpal-form-label"><?php _e('Severity', 'wp-activity-logger-pro'); ?></label>
-                        <select id="severity" name="severity" class="wpal-form-select">
-                            <option value=""><?php _e('All Severities', 'wp-activity-logger-pro'); ?></option>
-                            <?php foreach ($severities as $severity) : ?>
-                                <option value="<?php echo esc_attr($severity); ?>" <?php selected($severity_filter, $severity); ?>><?php echo esc_html(ucfirst($severity)); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    
-                    <div class="wpal-filter-actions">
-                        <button type="submit" class="wpal-btn wpal-btn-primary">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-filter"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-                            <?php _e('Filters', 'wp-activity-logger-pro'); ?>
-                        </button>
-                        
-                        <a href="<?php echo admin_url('admin.php?page=wp-activity-logger-pro'); ?>" class="wpal-btn wpal-btn-outline">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-refresh-cw"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                            <?php _e('Reset', 'wp-activity-logger-pro'); ?>
-                        </a>
-                    </div>
+                <div class="wpal-form-group" style="margin-right: 1rem;">
+                    <label for="user" class="wpal-form-label"><?php _e('User', 'wp-activity-logger-pro'); ?></label>
+                    <select name="user" id="user" class="wpal-form-control">
+                        <option value=""><?php _e('All Users', 'wp-activity-logger-pro'); ?></option>
+                        <?php foreach ($users as $user) : ?>
+                            <option value="<?php echo esc_attr($user); ?>" <?php selected($filter_user, $user); ?>><?php echo esc_html($user); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div class="wpal-form-group" style="margin-right: 1rem;">
+                    <label for="action" class="wpal-form-label"><?php _e('Action', 'wp-activity-logger-pro'); ?></label>
+                    <select name="action" id="action" class="wpal-form-control">
+                        <option value=""><?php _e('All Actions', 'wp-activity-logger-pro'); ?></option>
+                        <?php foreach ($actions as $action) : ?>
+                            <option value="<?php echo esc_attr($action); ?>" <?php selected($filter_action, $action); ?>><?php echo esc_html($action); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div class="wpal-form-group" style="margin-right: 1rem;">
+                    <label for="severity" class="wpal-form-label"><?php _e('Severity', 'wp-activity-logger-pro'); ?></label>
+                    <select name="severity" id="severity" class="wpal-form-control">
+                        <option value=""><?php _e('All Severities', 'wp-activity-logger-pro'); ?></option>
+                        <option value="info" <?php selected($filter_severity, 'info'); ?>><?php _e('Info', 'wp-activity-logger-pro'); ?></option>
+                        <option value="warning" <?php selected($filter_severity, 'warning'); ?>><?php _e('Warning', 'wp-activity-logger-pro'); ?></option>
+                        <option value="error" <?php selected($filter_severity, 'error'); ?>><?php _e('Error', 'wp-activity-logger-pro'); ?></option>
+                    </select>
+                </div>
+                
+                <div class="wpal-form-group" style="margin-right: 1rem;">
+                    <label for="date_from" class="wpal-form-label"><?php _e('Date From', 'wp-activity-logger-pro'); ?></label>
+                    <input type="text" name="date_from" id="date_from" class="wpal-form-control wpal-datepicker" value="<?php echo esc_attr($filter_date_from); ?>" placeholder="YYYY-MM-DD">
+                </div>
+                
+                <div class="wpal-form-group" style="margin-right: 1rem;">
+                    <label for="date_to" class="wpal-form-label"><?php _e('Date To', 'wp-activity-logger-pro'); ?></label>
+                    <input type="text" name="date_to" id="date_to" class="wpal-form-control wpal-datepicker" value="<?php echo esc_attr($filter_date_to); ?>" placeholder="YYYY-MM-DD">
+                </div>
+                
+                <div class="wpal-form-group" style="align-self: flex-end;">
+                    <button type="submit" class="wpal-btn wpal-btn-sm wpal-btn-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <?php _e('Filter', 'wp-activity-logger-pro'); ?>
+                    </button>
+                    <a href="<?php echo admin_url('admin.php?page=wp-activity-logger-pro'); ?>" class="wpal-btn wpal-btn-sm wpal-btn-secondary">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-x"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        <?php _e('Reset', 'wp-activity-logger-pro'); ?>
+                    </a>
                 </div>
             </form>
         </div>
     </div>
     
-    <div class="wpal-card wpal-mt-4">
-        <div class="wpal-card-header wpal-d-flex wpal-justify-content-between wpal-align-items-center">
-            <h2 class="wpal-card-title">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-list"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+    <div class="wpal-widget">
+        <div class="wpal-widget-header">
+            <h3 class="wpal-widget-title">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-list"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
                 <?php _e('Activity Logs', 'wp-activity-logger-pro'); ?>
-                <span class="wpal-badge wpal-badge-info"><?php echo number_format($total_items); ?></span>
-            </h2>
-            <div class="wpal-d-flex wpal-gap-2">
-                <a href="<?php echo admin_url('admin.php?page=wp-activity-logger-pro-export'); ?>" class="wpal-btn wpal-btn-secondary wpal-btn-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-download"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                    <?php _e('Export Logs', 'wp-activity-logger-pro'); ?>
-                </a>
-                <button id="wpal-delete-all-logs" class="wpal-btn wpal-btn-danger wpal-btn-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-trash-2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                    <?php _e('Delete All Logs', 'wp-activity-logger-pro'); ?>
-                </button>
-            </div>
+            </h3>
         </div>
-        <div class="wpal-card-body">
-            <?php if (empty($logs)) : ?>
-                <div class="wpal-alert wpal-alert-info">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                    <?php _e('No logs found.', 'wp-activity-logger-pro'); ?>
-                </div>
-            <?php else : ?>
-                <div class="wpal-table-responsive">
-                    <table class="wpal-table wpal-table-striped" id="wpal-logs-table">
-                        <thead>
+        <div class="wpal-widget-body">
+            <div class="wpal-table-responsive">
+                <table id="wpal-logs-table" class="wpal-table wpal-table-striped">
+                    <thead>
+                        <tr>
+                            <th><?php _e('ID', 'wp-activity-logger-pro'); ?></th>
+                            <th><?php _e('User', 'wp-activity-logger-pro'); ?></th>
+                            <th><?php _e('Action', 'wp-activity-logger-pro'); ?></th>
+                            <th><?php _e('Severity', 'wp-activity-logger-pro'); ?></th>
+                            <th><?php _e('Time', 'wp-activity-logger-pro'); ?></th>
+                            <th><?php _e('IP', 'wp-activity-logger-pro'); ?></th>
+                            <th><?php _e('Actions', 'wp-activity-logger-pro'); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($logs)) : ?>
                             <tr>
-                                <th><?php _e('Time', 'wp-activity-logger-pro'); ?></th>
-                                <th><?php _e('User', 'wp-activity-logger-pro'); ?></th>
-                                <th><?php _e('Action', 'wp-activity-logger-pro'); ?></th>
-                                <th><?php _e('IP', 'wp-activity-logger-pro'); ?></th>
-                                <th><?php _e('Browser', 'wp-activity-logger-pro'); ?></th>
-                                <th><?php _e('Severity', 'wp-activity-logger-pro'); ?></th>
-                                <th><?php _e('Actions', 'wp-activity-logger-pro'); ?></th>
+                                <td colspan="7" class="wpal-text-center"><?php _e('No logs found.', 'wp-activity-logger-pro'); ?></td>
                             </tr>
-                        </thead>
-                        <tbody>
+                        <?php else : ?>
                             <?php foreach ($logs as $log) : ?>
+                                <?php
+                                // Get severity badge
+                                $severity_badge = '';
+                                switch ($log->severity) {
+                                    case 'info':
+                                        $severity_badge = '<span class="wpal-badge wpal-badge-info"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg> ' . __('Info', 'wp-activity-logger-pro') . '</span>';
+                                        break;
+                                    case 'warning':
+                                        $severity_badge = '<span class="wpal-badge wpal-badge-warning"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-alert-triangle"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> ' . __('Warning', 'wp-activity-logger-pro') . '</span>';
+                                        break;
+                                    case 'error':
+                                        $severity_badge = '<span class="wpal-badge wpal-badge-danger"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-alert-octagon"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> ' . __('Error', 'wp-activity-logger-pro') . '</span>';
+                                        break;
+                                    default:
+                                        $severity_badge = '<span class="wpal-badge wpal-badge-info"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-activity"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> ' . __('Info', 'wp-activity-logger-pro') . '</span>';
+                                }
+                                ?>
                                 <tr>
-                                    <td><?php echo WPAL_Helpers::format_datetime($log->time); ?></td>
-                                    <td>
-                                        <?php if ($log->user_id > 0) : ?>
-                                            <a href="<?php echo admin_url('user-edit.php?user_id=' . $log->user_id); ?>" class="wpal-user-link">
-                                                <?php echo esc_html($log->username); ?>
-                                            </a>
-                                            <br><small class="wpal-text-muted"><?php echo esc_html($log->user_role); ?></small>
-                                        <?php else : ?>
-                                            <?php echo esc_html($log->username); ?>
-                                        <?php endif; ?>
-                                    </td>
+                                    <td><?php echo esc_html($log->id); ?></td>
+                                    <td><?php echo esc_html($log->username); ?></td>
                                     <td><?php echo esc_html($log->action); ?></td>
+                                    <td><?php echo $severity_badge; ?></td>
+                                    <td><?php echo WPAL_Helpers::format_datetime($log->time); ?></td>
+                                    <td><?php echo esc_html($log->ip); ?></td>
                                     <td>
-                                        <?php 
-                                        // Fix for IP not showing
-                                        $ip = !empty($log->ip) ? $log->ip : WPAL_Helpers::get_client_ip();
-                                        echo esc_html($ip);
-                                        ?>
-                                    </td>
-                                    <td><?php echo esc_html($log->browser); ?></td>
-                                    <td>
-                                        <?php 
-                                        $severity_class = '';
-                                        switch ($log->severity) {
-                                            case 'info':
-                                                $severity_class = 'success';
-                                                break;
-                                            case 'warning':
-                                                $severity_class = 'warning';
-                                                break;
-                                            case 'error':
-                                                $severity_class = 'danger';
-                                                break;
-                                            default:
-                                                $severity_class = 'info';
-                                        }
-                                        ?>
-                                        <span class="wpal-badge wpal-badge-<?php echo $severity_class; ?>"><?php echo esc_html(ucfirst($log->severity)); ?></span>
-                                    </td>
-                                    <td>
-                                        <div class="wpal-d-flex wpal-gap-2">
-                                            <button class="wpal-btn wpal-btn-info wpal-btn-sm wpal-view-details" data-id="<?php echo $log->id; ?>" data-context='<?php echo esc_attr($log->context); ?>' data-bs-toggle="tooltip" title="<?php _e('View Details', 'wp-activity-logger-pro'); ?>">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-eye"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                        <div class="wpal-d-flex">
+                                            <button type="button" class="wpal-btn wpal-btn-sm wpal-btn-icon wpal-btn-secondary wpal-view-log" data-log-id="<?php echo esc_attr($log->id); ?>" title="<?php _e('View Details', 'wp-activity-logger-pro'); ?>">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-eye"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                             </button>
-                                            <button class="wpal-btn wpal-btn-danger wpal-btn-sm wpal-delete-log" data-id="<?php echo $log->id; ?>" data-bs-toggle="tooltip" title="<?php _e('Delete Log', 'wp-activity-logger-pro'); ?>">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-trash"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                            <button type="button" class="wpal-btn wpal-btn-sm wpal-btn-icon wpal-btn-danger wpal-delete-log" data-log-id="<?php echo esc_attr($log->id); ?>" data-nonce="<?php echo wp_create_nonce('wpal_delete_log_' . $log->id); ?>" title="<?php _e('Delete', 'wp-activity-logger-pro'); ?>">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-trash-2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                                             </button>
                                         </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-                
-                <?php if ($total_pages > 1) : ?>
-                    <div class="wpal-pagination wpal-mt-3">
-                        <ul class="wpal-pagination-list">
-                            <?php if ($page > 1) : ?>
-                                <li class="wpal-pagination-item">
-                                    <a href="<?php echo esc_url($base_url . '&paged=' . ($page - 1)); ?>">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevron-left"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                                    </a>
-                                </li>
-                            <?php else : ?>
-                                <li class="wpal-pagination-item disabled">
-                                    <span>
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevron-left"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                                    </span>
-                                </li>
-                            <?php endif; ?>
-                            
-                            <?php
-                            $start_page = max(1, $page - 2);
-                            $end_page = min($total_pages, $start_page + 4);
-                            
-                            if ($end_page - $start_page < 4 && $start_page > 1) {
-                                $start_page = max(1, $end_page - 4);
-                            }
-                            
-                            for ($i = $start_page; $i <= $end_page; $i++) :
-                            ?>
-                                <li class="wpal-pagination-item <?php echo ($i === $page) ? 'active' : ''; ?>">
-                                    <?php if ($i === $page) : ?>
-                                        <span><?php echo $i; ?></span>
-                                    <?php else : ?>
-                                        <a href="<?php echo esc_url($base_url . '&paged=' . $i); ?>"><?php echo $i; ?></a>
-                                    <?php endif; ?>
-                                </li>
-                            <?php endfor; ?>
-                            
-                            <?php if ($page < $total_pages) : ?>
-                                <li class="wpal-pagination-item">
-                                    <a href="<?php echo esc_url($base_url . '&paged=' . ($page + 1)); ?>">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevron-right"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                                    </a>
-                                </li>
-                            <?php else : ?>
-                                <li class="wpal-pagination-item disabled">
-                                    <span>
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevron-right"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                                    </span>
-                                </li>
-                            <?php endif; ?>
-                        </ul>
-                    </div>
-                <?php endif; ?>
-            <?php endif; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
 
+<!-- Log Details Modal -->
+<div id="wpal-log-details-modal" class="wpal-modal">
+    <div class="wpal-modal-content">
+        <div class="wpal-modal-header">
+            <h3><?php _e('Log Details', 'wp-activity-logger-pro'); ?></h3>
+            <button type="button" class="wpal-modal-close">&times;</button>
+        </div>
+        <div class="wpal-modal-body"></div>
+    </div>
+</div>
+
 <script>
-    jQuery(document).ready(function($) {
-        // Initialize tooltips
-        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
-        if (tooltipTriggerList.length) {
-            const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
-        }
-        
-        // Initialize DataTable
+jQuery(document).ready(function($) {
+    // Initialize DataTables
+    if ($.fn.dataTable && !$.fn.dataTable.isDataTable('#wpal-logs-table')) {
         $('#wpal-logs-table').DataTable({
-            "paging": false,
-            "searching": false,
-            "ordering": true,
-            "order": [[0, 'desc']],
-            "info": false,
-            "responsive": true,
-            "language": {
-                "emptyTable": "No logs found",
-                "zeroRecords": "No matching logs found"
+            order: [[4, 'desc']], // Sort by time column (index 4) in descending order
+            pageLength: 25,
+            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
+            responsive: true,
+            dom: 'Bfrtip',
+            buttons: [
+                'copy', 'csv', 'excel', 'pdf', 'print'
+            ],
+            language: {
+                search: '<span class="screen-reader-text">Search logs:</span> ',
+                searchPlaceholder: 'Search logs...',
+                info: 'Showing _START_ to _END_ of _TOTAL_ logs',
+                lengthMenu: 'Show _MENU_ logs per page'
             }
         });
+    }
+    
+    // View log details
+    $(document).on('click', '.wpal-view-log', function(e) {
+        e.preventDefault();
         
-        // View log details
-        $('.wpal-view-details').on('click', function() {
-            const context = $(this).data('context');
-            let contextObj;
-            
-            try {
-                contextObj = JSON.parse(context);
-            } catch (e) {
-                contextObj = {};
-            }
-            
-            let html = '';
-            
-            if (Object.keys(contextObj).length === 0) {
-                html = '<div class="wpal-alert wpal-alert-info">' +
-                    '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>' +
-                    'No additional details available for this log entry.' +
-                    '</div>';
-            } else {
-                html = '<div class="wpal-log-details-table-container">' +
-                    '<table class="wpal-log-details-table">';
-                
-                for (const key in contextObj) {
-                    if (contextObj.hasOwnProperty(key)) {
-                        html += '<tr>' +
-                            '<th>' + key + '</th>' +
-                            '<td>' + contextObj[key] + '</td>' +
-                            '</tr>';
-                    }
-                }
-                
-                html += '</table></div>';
-            }
-            
-            $('#wpal-log-details-content').html(html);
-            const modal = new bootstrap.Modal(document.getElementById('wpal-log-details-modal'));
-            modal.show();
-        });
+        const logId = $(this).data('log-id');
         
-        // Delete log
-        $('.wpal-delete-log').on('click', function() {
-            if (confirm(wpal_admin_vars.confirm_delete)) {
-                const logId = $(this).data('id');
-                const row = $(this).closest('tr');
-                
-                $.ajax({
-                    url: ajaxurl,
-                    type: 'POST',
-                    data: {
-                        action: 'wpal_delete_log',
-                        nonce: wpal_admin_vars.delete_nonce,
-                        log_id: logId
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            row.fadeOut(400, function() {
-                                row.remove();
-                                
-                                // Show message if no logs left
-                                if ($('#wpal-logs-table tbody tr').length === 0) {
-                                    $('#wpal-logs-table').parent().html('<div class="wpal-alert wpal-alert-info">' +
-                                        '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>' +
-                                        'No logs found.' +
-                                        '</div>');
-                                }
-                            });
-                        } else {
-                            alert(response.data);
-                        }
-                    },
-                    error: function() {
-                        alert('Error deleting log entry.');
-                    }
-                });
-            }
-        });
-        
-        // Delete all logs
-        $('#wpal-delete-all-logs').on('click', function() {
-            if (confirm(wpal_admin_vars.confirm_delete_all)) {
-                $.ajax({
-                    url: ajaxurl,
-                    type: 'POST',
-                    data: {
-                        action: 'wpal_delete_all_logs',
-                        nonce: wpal_admin_vars.delete_nonce
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            location.reload();
-                        } else {
-                            alert(response.data);
-                        }
-                    },
-                    error: function() {
-                        alert('Error deleting logs.');
-                    }
-                });
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'wpal_get_log_details',
+                nonce: wpal_admin_vars.nonce,
+                log_id: logId
+            },
+            success: function(response) {
+                // Set modal content and show
+                $('#wpal-log-details-modal .wpal-modal-body').html(response);
+                $('#wpal-log-details-modal').addClass('wpal-modal-show');
             }
         });
     });
+    
+    // Close modal on click
+    $(document).on('click', '.wpal-modal-close', function() {
+        $('#wpal-log-details-modal').removeClass('wpal-modal-show');
+    });
+    
+    // Close modal on outside click
+    $(window).on('click', function(e) {
+        if ($(e.target).is('#wpal-log-details-modal')) {
+            $('#wpal-log-details-modal').removeClass('wpal-modal-show');
+        }
+    });
+    
+    // Delete log entry
+    $(document).on('click', '.wpal-delete-log', function(e) {
+        e.preventDefault();
+        
+        if (!confirm(wpal_admin_vars.confirm_delete)) {
+            return;
+        }
+        
+        const $row = $(this).closest('tr');
+        const logId = $(this).data('log-id');
+        const nonce = $(this).data('nonce');
+        
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'wpal_delete_log',
+                log_id: logId,
+                nonce: nonce
+            },
+            success: function(response) {
+                if (response.success) {
+                    $row.fadeOut(300, function() {
+                        // If using DataTables, we need to remove the row properly
+                        if ($.fn.dataTable && $.fn.dataTable.isDataTable('#wpal-logs-table')) {
+                            const table = $('#wpal-logs-table').DataTable();
+                            table.row($row).remove().draw();
+                        } else {
+                            $row.remove();
+                        }
+                    });
+                } else {
+                    alert(response.data);
+                }
+            },
+            error: function() {
+                alert('An error occurred while deleting the log.');
+            }
+        });
+    });
+    
+    // Delete all logs
+    $('#wpal-delete-all-logs').on('click', function(e) {
+        e.preventDefault();
+        
+        if (!confirm(wpal_admin_vars.confirm_delete_all)) {
+            return;
+        }
+        
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'wpal_delete_all_logs',
+                nonce: wpal_admin_vars.delete_nonce
+            },
+            success: function(response) {
+                if (response.success) {
+                    window.location.reload();
+                } else {
+                    alert(response.data);
+                }
+            },
+            error: function() {
+                alert('An error occurred while deleting all logs.');
+            }
+        });
+    });
+    
+    // Initialize date pickers
+    if ($.fn.datepicker) {
+        $('.wpal-datepicker').datepicker({
+            dateFormat: 'yy-mm-dd',
+            maxDate: '0'
+        });
+    }
+});
 </script>
