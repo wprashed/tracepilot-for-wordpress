@@ -1,6 +1,6 @@
 <?php
 /**
- * API functionality for WP Activity Logger Pro
+ * API class for WP Activity Logger Pro
  */
 
 // Exit if accessed directly
@@ -10,670 +10,444 @@ if (!defined('ABSPATH')) {
 
 class WPAL_API {
     /**
-     * Initialize the class
+     * Constructor
      */
-    public static function init() {
-        add_action('rest_api_init', [__CLASS__, 'register_routes']);
+    public function __construct() {
+        // Nothing to do here
     }
-    
+
     /**
-     * Register REST API routes
+     * Get activity chart data
      */
-    public static function register_routes() {
-        register_rest_route('wpal/v1', '/stats', [
-            'methods' => 'GET',
-            'callback' => [__CLASS__, 'get_stats'],
-            'permission_callback' => [__CLASS__, 'check_permissions'],
-        ]);
+    public function get_activity_chart() {
+        // Check nonce
+        check_ajax_referer('wpal_nonce', 'nonce');
         
-        register_rest_route('wpal/v1', '/logs', [
-            'methods' => 'GET',
-            'callback' => [__CLASS__, 'get_logs'],
-            'permission_callback' => [__CLASS__, 'check_permissions'],
-        ]);
-        
-        register_rest_route('wpal/v1', '/logs/(?P<id>\d+)', [
-            'methods' => 'GET',
-            'callback' => [__CLASS__, 'get_log'],
-            'permission_callback' => [__CLASS__, 'check_permissions'],
-            'args' => [
-                'id' => [
-                    'validate_callback' => function($param) {
-                        return is_numeric($param);
-                    }
-                ],
-            ],
-        ]);
-        
-        register_rest_route('wpal/v1', '/logs/filter', [
-            'methods' => 'GET',
-            'callback' => [__CLASS__, 'filter_logs'],
-            'permission_callback' => [__CLASS__, 'check_permissions'],
-        ]);
-        
-        register_rest_route('wpal/v1', '/users', [
-            'methods' => 'GET',
-            'callback' => [__CLASS__, 'get_users'],
-            'permission_callback' => [__CLASS__, 'check_permissions'],
-        ]);
-        
-        register_rest_route('wpal/v1', '/actions', [
-            'methods' => 'GET',
-            'callback' => [__CLASS__, 'get_actions'],
-            'permission_callback' => [__CLASS__, 'check_permissions'],
-        ]);
-        
-        register_rest_route('wpal/v1', '/push', [
-            'methods' => 'GET',
-            'callback' => [__CLASS__, 'push_connection'],
-            'permission_callback' => [__CLASS__, 'check_permissions'],
-        ]);
-    }
-    
-    /**
-     * Check permissions for API requests
-     */
-    public static function check_permissions() {
-        return current_user_can('manage_options');
-    }
-    
-    /**
-     * Get dashboard statistics
-     */
-    public static function get_stats($request) {
-        global $wpdb;
-        WPAL_Helpers::init();
-        $table_name = WPAL_Helpers::$db_table;
-        
-        // Check if table exists
-        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
-        
-        if (!$table_exists) {
-            return new WP_Error('table_not_found', 'Activity log table not found', ['status' => 404]);
+        // Check if user has permission
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have permission to access this page.', 'wp-activity-logger-pro'));
         }
         
-        // Get daily activity for the last 30 days
-        $daily_activity = $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT DATE(time) as date, COUNT(*) as count 
-                FROM $table_name 
-                WHERE time >= DATE_SUB(NOW(), INTERVAL %d DAY) 
-                GROUP BY DATE(time) 
-                ORDER BY date ASC",
-                30
-            )
-        );
+        global $wpdb;
+        WPAL_Helpers::init();
         
-        // Get top 10 users by activity
-        $user_activity = $wpdb->get_results(
-            "SELECT username, COUNT(*) as count 
-            FROM $table_name 
+        // Get logs for the last 30 days
+        $start_date = date('Y-m-d', strtotime('-30 days'));
+        $end_date = date('Y-m-d');
+        
+        $logs = $wpdb->get_results($wpdb->prepare(
+            "SELECT DATE(time) as date, COUNT(*) as count FROM " . WPAL_Helpers::$db_table . " 
+            WHERE time >= %s AND time <= %s 
+            GROUP BY DATE(time) 
+            ORDER BY date ASC",
+            $start_date . ' 00:00:00',
+            $end_date . ' 23:59:59'
+        ));
+        
+        // Prepare data for chart
+        $dates = array();
+        $counts = array();
+        
+        // Fill in missing dates
+        $current_date = new DateTime($start_date);
+        $end_date_obj = new DateTime($end_date);
+        $end_date_obj->modify('+1 day'); // Include end date
+        
+        $date_counts = array();
+        foreach ($logs as $log) {
+            $date_counts[$log->date] = $log->count;
+        }
+        
+        while ($current_date < $end_date_obj) {
+            $date_str = $current_date->format('Y-m-d');
+            $dates[] = $date_str;
+            $counts[] = isset($date_counts[$date_str]) ? $date_counts[$date_str] : 0;
+            $current_date->modify('+1 day');
+        }
+        
+        // Output chart HTML
+        ?>
+        <canvas id="wpal-activity-chart" height="300"></canvas>
+        <script>
+        jQuery(document).ready(function($) {
+            const ctx = document.getElementById('wpal-activity-chart').getContext('2d');
+            const activityChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: <?php echo json_encode($dates); ?>,
+                    datasets: [{
+                        label: '<?php _e('Activity Count', 'wp-activity-logger-pro'); ?>',
+                        data: <?php echo json_encode($counts); ?>,
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointBackgroundColor: 'rgba(54, 162, 235, 1)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    }
+                }
+            });
+        });
+        </script>
+        <?php
+        
+        wp_die();
+    }
+
+    /**
+     * Get top users
+     */
+    public function get_top_users() {
+        // Check nonce
+        check_ajax_referer('wpal_nonce', 'nonce');
+        
+        // Check if user has permission
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have permission to access this page.', 'wp-activity-logger-pro'));
+        }
+        
+        global $wpdb;
+        WPAL_Helpers::init();
+        
+        // Get top 10 users
+        $users = $wpdb->get_results(
+            "SELECT username, user_role, COUNT(*) as count FROM " . WPAL_Helpers::$db_table . " 
             GROUP BY username 
             ORDER BY count DESC 
             LIMIT 10"
         );
         
-        // Get top 10 action types
-        $action_types = $wpdb->get_results(
-            "SELECT 
-                CASE 
-                    WHEN action LIKE 'Login%' THEN 'Login' 
-                    WHEN action LIKE 'Logout%' THEN 'Logout' 
-                    WHEN action LIKE 'Plugin%' THEN 'Plugin' 
-                    WHEN action LIKE 'Theme%' THEN 'Theme' 
-                    WHEN action LIKE 'Post%' THEN 'Post' 
-                    WHEN action LIKE 'Page%' THEN 'Page' 
-                    WHEN action LIKE 'User%' THEN 'User' 
-                    WHEN action LIKE 'Media%' THEN 'Media' 
-                    WHEN action LIKE 'Comment%' THEN 'Comment' 
-                    ELSE 'Other' 
-                END as action_type, 
-                COUNT(*) as count 
-            FROM $table_name 
-            GROUP BY action_type 
-            ORDER BY count DESC 
-            LIMIT 10"
-        );
+        // Output users HTML
+        if (empty($users)) {
+            echo '<p class="wpal-text-center">' . __('No user activity found.', 'wp-activity-logger-pro') . '</p>';
+            wp_die();
+        }
         
-        // Get severity distribution
-        $severity_distribution = $wpdb->get_results(
-            "SELECT severity, COUNT(*) as count 
-            FROM $table_name 
+        ?>
+        <div class="wpal-table-responsive">
+            <table class="wpal-table wpal-table-striped">
+                <thead>
+                    <tr>
+                        <th><?php _e('User', 'wp-activity-logger-pro'); ?></th>
+                        <th><?php _e('Role', 'wp-activity-logger-pro'); ?></th>
+                        <th><?php _e('Activity Count', 'wp-activity-logger-pro'); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($users as $user) : ?>
+                        <tr>
+                            <td><?php echo esc_html($user->username); ?></td>
+                            <td><?php echo esc_html($user->user_role); ?></td>
+                            <td><?php echo esc_html($user->count); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php
+        
+        wp_die();
+    }
+
+    /**
+     * Get severity breakdown
+     */
+    public function get_severity_breakdown() {
+        // Check nonce
+        check_ajax_referer('wpal_nonce', 'nonce');
+        
+        // Check if user has permission
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have permission to access this page.', 'wp-activity-logger-pro'));
+        }
+        
+        global $wpdb;
+        WPAL_Helpers::init();
+        
+        // Get severity counts
+        $severities = $wpdb->get_results(
+            "SELECT severity, COUNT(*) as count FROM " . WPAL_Helpers::$db_table . " 
             GROUP BY severity 
             ORDER BY count DESC"
         );
         
-        // Get total logs
-        $total_logs = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
+        // Prepare data for chart
+        $labels = array();
+        $data = array();
+        $colors = array();
         
-        // Get logs in the last 24 hours
-        $logs_24h = $wpdb->get_var(
-            "SELECT COUNT(*) 
-            FROM $table_name 
-            WHERE time >= DATE_SUB(NOW(), INTERVAL 24 HOUR)"
-        );
-        
-        // Get logs in the last 7 days
-        $logs_7d = $wpdb->get_var(
-            "SELECT COUNT(*) 
-            FROM $table_name 
-            WHERE time >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
-        );
-        
-        // Get logs in the last 30 days
-        $logs_30d = $wpdb->get_var(
-            "SELECT COUNT(*) 
-            FROM $table_name 
-            WHERE time >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
-        );
-        
-        // Get unique users
-        $unique_users = $wpdb->get_var("SELECT COUNT(DISTINCT username) FROM $table_name");
-        
-        // Get unique IPs
-        $unique_ips = $wpdb->get_var("SELECT COUNT(DISTINCT ip) FROM $table_name");
-        
-        // Get error count
-        $error_count = $wpdb->get_var(
-            "SELECT COUNT(*) 
-            FROM $table_name 
-            WHERE severity = 'error'"
-        );
-        
-        // Get warning count
-        $warning_count = $wpdb->get_var(
-            "SELECT COUNT(*) 
-            FROM $table_name 
-            WHERE severity = 'warning'"
-        );
-        
-        // Get info count
-        $info_count = $wpdb->get_var(
-            "SELECT COUNT(*) 
-            FROM $table_name 
-            WHERE severity = 'info'"
-        );
-        
-        // Return all stats
-        return [
-            'daily_activity' => $daily_activity,
-            'user_activity' => $user_activity,
-            'action_types' => $action_types,
-            'severity_distribution' => $severity_distribution,
-            'total_logs' => (int) $total_logs,
-            'logs_24h' => (int) $logs_24h,
-            'logs_7d' => (int) $logs_7d,
-            'logs_30d' => (int) $logs_30d,
-            'unique_users' => (int) $unique_users,
-            'unique_ips' => (int) $unique_ips,
-            'error_count' => (int) $error_count,
-            'warning_count' => (int) $warning_count,
-            'info_count' => (int) $info_count,
-        ];
-    }
-    
-    /**
-     * Get logs with pagination
-     */
-    public static function get_logs($request) {
-        global $wpdb;
-        WPAL_Helpers::init();
-        $table_name = WPAL_Helpers::$db_table;
-        
-        // Check if table exists
-        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
-        
-        if (!$table_exists) {
-            return new WP_Error('table_not_found', 'Activity log table not found', ['status' => 404]);
-        }
-        
-        // Get pagination parameters
-        $per_page = isset($request['per_page']) ? intval($request['per_page']) : 25;
-        $page = isset($request['page']) ? intval($request['page']) : 1;
-        $offset = ($page - 1) * $per_page;
-        
-        // Get logs
-        $logs = $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT * FROM $table_name ORDER BY time DESC LIMIT %d OFFSET %d",
-                $per_page,
-                $offset
-            )
-        );
-        
-        // Get total logs
-        $total_logs = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
-        
-        // Parse context JSON
-        foreach ($logs as $log) {
-            if (!empty($log->context)) {
-                $log->context = json_decode($log->context);
+        foreach ($severities as $severity) {
+            $labels[] = ucfirst($severity->severity);
+            $data[] = $severity->count;
+            
+            // Set color based on severity
+            switch ($severity->severity) {
+                case 'info':
+                    $colors[] = 'rgba(54, 162, 235, 0.8)';
+                    break;
+                case 'warning':
+                    $colors[] = 'rgba(255, 159, 64, 0.8)';
+                    break;
+                case 'error':
+                    $colors[] = 'rgba(255, 99, 132, 0.8)';
+                    break;
+                default:
+                    $colors[] = 'rgba(75, 192, 192, 0.8)';
             }
         }
         
-        // Set headers
-        $total_pages = ceil($total_logs / $per_page);
+        // Output chart HTML
+        ?>
+        <canvas id="wpal-severity-chart" height="300"></canvas>
+        <script>
+        jQuery(document).ready(function($) {
+            const ctx = document.getElementById('wpal-severity-chart').getContext('2d');
+            const severityChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: <?php echo json_encode($labels); ?>,
+                    datasets: [{
+                        data: <?php echo json_encode($data); ?>,
+                        backgroundColor: <?php echo json_encode($colors); ?>,
+                        borderColor: '#ffffff',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+        </script>
+        <?php
         
-        return [
-            'logs' => $logs,
-            'total' => (int) $total_logs,
-            'total_pages' => $total_pages,
-            'current_page' => $page,
-            'per_page' => $per_page,
-        ];
+        wp_die();
     }
-    
+
     /**
-     * Get a single log entry
+     * Get recent logs
      */
-    public static function get_log($request) {
+    public function get_recent_logs() {
+        // Check nonce
+        check_ajax_referer('wpal_nonce', 'nonce');
+        
+        // Check if user has permission
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have permission to access this page.', 'wp-activity-logger-pro'));
+        }
+        
         global $wpdb;
         WPAL_Helpers::init();
-        $table_name = WPAL_Helpers::$db_table;
         
-        // Check if table exists
-        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
+        // Get recent logs
+        $logs = $wpdb->get_results(
+            "SELECT * FROM " . WPAL_Helpers::$db_table . " 
+            ORDER BY time DESC 
+            LIMIT 10"
+        );
         
-        if (!$table_exists) {
-            return new WP_Error('table_not_found', 'Activity log table not found', ['status' => 404]);
+        // Output logs HTML
+        if (empty($logs)) {
+            echo '<p class="wpal-text-center">' . __('No logs found.', 'wp-activity-logger-pro') . '</p>';
+            wp_die();
+        }
+        
+        ?>
+        <div class="wpal-table-responsive">
+            <table class="wpal-table wpal-table-striped">
+                <thead>
+                    <tr>
+                        <th><?php _e('User', 'wp-activity-logger-pro'); ?></th>
+                        <th><?php _e('Action', 'wp-activity-logger-pro'); ?></th>
+                        <th><?php _e('Severity', 'wp-activity-logger-pro'); ?></th>
+                        <th><?php _e('Time', 'wp-activity-logger-pro'); ?></th>
+                        <th><?php _e('Actions', 'wp-activity-logger-pro'); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($logs as $log) : ?>
+                        <?php
+                        // Get severity badge
+                        $severity_badge = '';
+                        switch ($log->severity) {
+                            case 'info':
+                                $severity_badge = '<span class="wpal-badge wpal-badge-info"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg> ' . __('Info', 'wp-activity-logger-pro') . '</span>';
+                                break;
+                            case 'warning':
+                                $severity_badge = '<span class="wpal-badge wpal-badge-warning"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-alert-triangle"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> ' . __('Warning', 'wp-activity-logger-pro') . '</span>';
+                                break;
+                            case 'error':
+                                $severity_badge = '<span class="wpal-badge wpal-badge-danger"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-alert-octagon"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> ' . __('Error', 'wp-activity-logger-pro') . '</span>';
+                                break;
+                            default:
+                                $severity_badge = '<span class="wpal-badge wpal-badge-info"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-activity"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> ' . __('Info', 'wp-activity-logger-pro') . '</span>';
+                        }
+                        ?>
+                        <tr>
+                            <td><?php echo esc_html($log->username); ?></td>
+                            <td><?php echo esc_html($log->action); ?></td>
+                            <td><?php echo $severity_badge; ?></td>
+                            <td><?php echo WPAL_Helpers::format_datetime($log->time); ?></td>
+                            <td>
+                                <button type="button" class="wpal-btn wpal-btn-sm wpal-btn-icon wpal-btn-secondary wpal-view-log" data-log-id="<?php echo esc_attr($log->id); ?>" title="<?php _e('View Details', 'wp-activity-logger-pro'); ?>">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-eye"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                </button>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php
+        
+        wp_die();
+    }
+
+    /**
+     * Get log details
+     */
+    public function get_log_details() {
+        // Check nonce
+        check_ajax_referer('wpal_nonce', 'nonce');
+        
+        // Check if user has permission
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have permission to access this page.', 'wp-activity-logger-pro'));
         }
         
         // Get log ID
-        $log_id = $request['id'];
+        $log_id = isset($_POST['log_id']) ? intval($_POST['log_id']) : 0;
         
-        // Get log
-        $log = $wpdb->get_row(
-            $wpdb->prepare(
-                "SELECT * FROM $table_name WHERE id = %d",
-                $log_id
-            )
-        );
-        
-        if (!$log) {
-            return new WP_Error('log_not_found', 'Log entry not found', ['status' => 404]);
+        if (!$log_id) {
+            wp_die(__('Invalid log ID.', 'wp-activity-logger-pro'));
         }
         
-        // Parse context JSON
-        if (!empty($log->context)) {
-            $log->context = json_decode($log->context);
-        }
+        // Include log details template
+        include WPAL_PLUGIN_DIR . 'templates/log-details.php';
         
-        return $log;
+        wp_die();
     }
-    
+
     /**
-     * Filter logs
+     * Delete a log entry
      */
-    public static function filter_logs($request) {
+    public function delete_log() {
+        // Check if user has permission
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('You do not have permission to delete logs.', 'wp-activity-logger-pro'));
+        }
+        
+        // Get log ID
+        $log_id = isset($_POST['log_id']) ? intval($_POST['log_id']) : 0;
+        
+        // Verify nonce
+        $nonce = isset($_POST['nonce']) ? sanitize_text_field($_POST['nonce']) : '';
+        if (!wp_verify_nonce($nonce, 'wpal_delete_log_' . $log_id)) {
+            wp_send_json_error(__('Security check failed.', 'wp-activity-logger-pro'));
+        }
+        
+        // Delete log
         global $wpdb;
         WPAL_Helpers::init();
-        $table_name = WPAL_Helpers::$db_table;
-        
-        // Check if table exists
-        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
-        
-        if (!$table_exists) {
-            return new WP_Error('table_not_found', 'Activity log table not found', ['status' => 404]);
-        }
-        
-        // Get pagination parameters
-        $per_page = isset($request['per_page']) ? intval($request['per_page']) : 25;
-        $page = isset($request['page']) ? intval($request['page']) : 1;
-        $offset = ($page - 1) * $per_page;
-        
-        // Build query
-        $query = "SELECT * FROM $table_name WHERE 1=1";
-        $count_query = "SELECT COUNT(*) FROM $table_name WHERE 1=1";
-        $query_args = [];
-        
-        // Filter by user
-        if (isset($request['user']) && !empty($request['user'])) {
-            $query .= " AND username = %s";
-            $count_query .= " AND username = %s";
-            $query_args[] = $request['user'];
-        }
-        
-        // Filter by user ID
-        if (isset($request['user_id']) && !empty($request['user_id'])) {
-            $query .= " AND user_id = %d";
-            $count_query .= " AND user_id = %d";
-            $query_args[] = intval($request['user_id']);
-        }
-        
-        // Filter by action
-        if (isset($request['action']) && !empty($request['action'])) {
-            $query .= " AND action LIKE %s";
-            $count_query .= " AND action LIKE %s";
-            $query_args[] = '%' . $wpdb->esc_like($request['action']) . '%';
-        }
-        
-        // Filter by IP
-        if (isset($request['ip']) && !empty($request['ip'])) {
-            $query .= " AND ip = %s";
-            $count_query .= " AND ip = %s";
-            $query_args[] = $request['ip'];
-        }
-        
-        // Filter by severity
-        if (isset($request['severity']) && !empty($request['severity'])) {
-            $query .= " AND severity = %s";
-            $count_query .= " AND severity = %s";
-            $query_args[] = $request['severity'];
-        }
-        
-        // Filter by date range
-        if (isset($request['date_from']) && !empty($request['date_from'])) {
-            $query .= " AND time >= %s";
-            $count_query .= " AND time >= %s";
-            $query_args[] = $request['date_from'] . ' 00:00:00';
-        }
-        
-        if (isset($request['date_to']) && !empty($request['date_to'])) {
-            $query .= " AND time <= %s";
-            $count_query .= " AND time <= %s";
-            $query_args[] = $request['date_to'] . ' 23:59:59';
-        }
-        
-        // Add order and limit
-        $query .= " ORDER BY time DESC LIMIT %d OFFSET %d";
-        $query_args[] = $per_page;
-        $query_args[] = $offset;
-        
-        // Get logs
-        $logs = $wpdb->get_results(
-            $wpdb->prepare(
-                $query,
-                $query_args
-            )
+        $result = $wpdb->delete(
+            WPAL_Helpers::$db_table,
+            array('id' => $log_id),
+            array('%d')
         );
         
-        // Get total logs
-        $total_logs = $wpdb->get_var(
-            $wpdb->prepare(
-                $count_query,
-                array_slice($query_args, 0, -2)
-            )
-        );
-        
-        // Parse context JSON
-        foreach ($logs as $log) {
-            if (!empty($log->context)) {
-                $log->context = json_decode($log->context);
-            }
+        if ($result === false) {
+            wp_send_json_error(__('Failed to delete log.', 'wp-activity-logger-pro'));
         }
         
-        // Set headers
-        $total_pages = ceil($total_logs / $per_page);
+        // Log the deletion
+        //WPAL_Helpers::log_activity(
+            //'log_deleted',
+            //sprintf(__('Log entry #%d was deleted', 'wp-activity-logger-pro'), $log_id),
+           // 'info'
+       // );
         
-        return [
-            'logs' => $logs,
-            'total' => (int) $total_logs,
-            'total_pages' => $total_pages,
-            'current_page' => $page,
-            'per_page' => $per_page,
-        ];
+        wp_send_json_success(__('Log deleted successfully.', 'wp-activity-logger-pro'));
     }
-    
+
     /**
-     * Get users who have activity logs
+     * Delete all logs
      */
-    public static function get_users($request) {
+    public function delete_all_logs() {
+        // Check if user has permission
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('You do not have permission to delete logs.', 'wp-activity-logger-pro'));
+        }
+        
+        // Verify nonce
+        $nonce = isset($_POST['nonce']) ? sanitize_text_field($_POST['nonce']) : '';
+        if (!wp_verify_nonce($nonce, 'wpal_delete_nonce')) {
+            wp_send_json_error(__('Security check failed.', 'wp-activity-logger-pro'));
+        }
+        
+        // Delete all logs
         global $wpdb;
         WPAL_Helpers::init();
-        $table_name = WPAL_Helpers::$db_table;
+        $result = $wpdb->query("TRUNCATE TABLE " . WPAL_Helpers::$db_table);
         
-        // Check if table exists
-        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
-        
-        if (!$table_exists) {
-            return new WP_Error('table_not_found', 'Activity log table not found', ['status' => 404]);
+        if ($result === false) {
+            wp_send_json_error(__('Failed to delete logs.', 'wp-activity-logger-pro'));
         }
         
-        // Get users
-        $users = $wpdb->get_results(
-            "SELECT DISTINCT username, user_id, user_role 
-            FROM $table_name 
-            ORDER BY username ASC"
+        // Log the deletion
+        WPAL_Helpers::log_activity(
+            'logs_deleted_all',
+            __('All logs were deleted', 'wp-activity-logger-pro'),
+            'warning'
         );
         
-        return $users;
-    }
-    
-    /**
-     * Get unique action types
-     */
-    public static function get_actions($request) {
-        global $wpdb;
-        WPAL_Helpers::init();
-        $table_name = WPAL_Helpers::$db_table;
-        
-        // Check if table exists
-        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
-        
-        if (!$table_exists) {
-            return new WP_Error('table_not_found', 'Activity log table not found', ['status' => 404]);
-        }
-        
-        // Get actions
-        $actions = $wpdb->get_results(
-            "SELECT DISTINCT action 
-            FROM $table_name 
-            ORDER BY action ASC"
-        );
-        
-        return array_map(function($item) {
-            return $item->action;
-        }, $actions);
-    }
-    
-    /**
-     * Handle WebSocket push connection
-     */
-    public static function push_connection($request) {
-        // This is just a placeholder for the WebSocket connection
-        // The actual WebSocket server would be implemented separately
-        // or using a plugin like WP Pusher
-        
-        return [
-            'status' => 'success',
-            'message' => 'WebSocket connection endpoint',
-        ];
-    }
-    
-    /**
-     * Send push notification
-     */
-    public static function send_push_notification($log) {
-        // Check if push notifications are enabled
-        $push_enabled = get_option('wpal_push_enabled', false);
-        
-        if (!$push_enabled) {
-            return;
-        }
-        
-        // In a real implementation, this would send a notification to connected clients
-        // For now, we'll just log that a notification would be sent
-        error_log('WPAL: Push notification would be sent for log ID ' . $log->id);
-        
-        // Example of how to send to a webhook
-        $webhook_url = get_option('wpal_webhook_url', '');
-        
-        if (!empty($webhook_url)) {
-            wp_remote_post($webhook_url, [
-                'headers' => [
-                    'Content-Type' => 'application/json',
-                ],
-                'body' => json_encode([
-                    'type' => 'activity_log',
-                    'data' => $log,
-                ]),
-            ]);
-        }
-        
-        // Send to Slack if enabled
-        self::send_to_slack($log);
-        
-        // Send to Discord if enabled
-        self::send_to_discord($log);
-        
-        // Send to Telegram if enabled
-        self::send_to_telegram($log);
-    }
-    
-    /**
-     * Send notification to Slack
-     */
-    private static function send_to_slack($log) {
-        $slack_webhook = get_option('wpal_slack_webhook', '');
-        
-        if (empty($slack_webhook)) {
-            return;
-        }
-        
-        // Format message for Slack
-        $color = '#28a745'; // Default to info color
-        
-        if ($log->severity === 'warning') {
-            $color = '#ffc107';
-        } elseif ($log->severity === 'error') {
-            $color = '#dc3545';
-        }
-        
-        $message = [
-            'attachments' => [
-                [
-                    'fallback' => 'Activity Log: ' . $log->action,
-                    'color' => $color,
-                    'title' => 'Activity Log: ' . $log->action,
-                    'fields' => [
-                        [
-                            'title' => 'User',
-                            'value' => $log->username,
-                            'short' => true,
-                        ],
-                        [
-                            'title' => 'IP',
-                            'value' => $log->ip,
-                            'short' => true,
-                        ],
-                        [
-                            'title' => 'Time',
-                            'value' => $log->time,
-                            'short' => true,
-                        ],
-                        [
-                            'title' => 'Severity',
-                            'value' => strtoupper($log->severity),
-                            'short' => true,
-                        ],
-                    ],
-                    'footer' => 'WP Activity Logger Pro',
-                    'ts' => strtotime($log->time),
-                ],
-            ],
-        ];
-        
-        // Send to Slack
-        wp_remote_post($slack_webhook, [
-            'headers' => [
-                'Content-Type' => 'application/json',
-            ],
-            'body' => json_encode($message),
-        ]);
-    }
-    
-    /**
-     * Send notification to Discord
-     */
-    private static function send_to_discord($log) {
-        $discord_webhook = get_option('wpal_discord_webhook', '');
-        
-        if (empty($discord_webhook)) {
-            return;
-        }
-        
-        // Format message for Discord
-        $color = 0x28a745; // Default to info color (hex to decimal)
-        
-        if ($log->severity === 'warning') {
-            $color = 0xffc107;
-        } elseif ($log->severity === 'error') {
-            $color = 0xdc3545;
-        }
-        
-        $message = [
-            'embeds' => [
-                [
-                    'title' => 'Activity Log: ' . $log->action,
-                    'color' => $color,
-                    'fields' => [
-                        [
-                            'name' => 'User',
-                            'value' => $log->username,
-                            'inline' => true,
-                        ],
-                        [
-                            'name' => 'IP',
-                            'value' => $log->ip,
-                            'inline' => true,
-                        ],
-                        [
-                            'name' => 'Time',
-                            'value' => $log->time,
-                            'inline' => true,
-                        ],
-                        [
-                            'name' => 'Severity',
-                            'value' => strtoupper($log->severity),
-                            'inline' => true,
-                        ],
-                    ],
-                    'footer' => [
-                        'text' => 'WP Activity Logger Pro',
-                    ],
-                    'timestamp' => date('c', strtotime($log->time)),
-                ],
-            ],
-        ];
-        
-        // Send to Discord
-        wp_remote_post($discord_webhook, [
-            'headers' => [
-                'Content-Type' => 'application/json',
-            ],
-            'body' => json_encode($message),
-        ]);
-    }
-    
-    /**
-     * Send notification to Telegram
-     */
-    private static function send_to_telegram($log) {
-        $telegram_bot_token = get_option('wpal_telegram_bot_token', '');
-        $telegram_chat_id = get_option('wpal_telegram_chat_id', '');
-        
-        if (empty($telegram_bot_token) || empty($telegram_chat_id)) {
-            return;
-        }
-        
-        // Format message for Telegram
-        $severity = strtoupper($log->severity);
-        $message = "🔔 *Activity Log*\n";
-        $message .= "Action: {$log->action}\n";
-        $message .= "User: {$log->username}\n";
-        $message .= "IP: {$log->ip}\n";
-        $message .= "Time: {$log->time}\n";
-        $message .= "Severity: {$severity}";
-        
-        // Send to Telegram
-        $telegram_api_url = "https://api.telegram.org/bot{$telegram_bot_token}/sendMessage";
-        
-        wp_remote_post($telegram_api_url, [
-            'body' => [
-                'chat_id' => $telegram_chat_id,
-                'text' => $message,
-                'parse_mode' => 'Markdown',
-            ],
-        ]);
+        wp_send_json_success(__('All logs deleted successfully.', 'wp-activity-logger-pro'));
     }
 }
