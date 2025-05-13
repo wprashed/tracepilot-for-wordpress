@@ -1,11 +1,14 @@
 <?php
 /**
- * Helper functions for WP Activity Logger Pro
+ * WP Activity Logger Helpers
+ *
+ * @package WP Activity Logger
+ * @since 1.0.0
  */
 
 // Exit if accessed directly
 if (!defined('ABSPATH')) {
-    exit;
+    exit();
 }
 
 class WPAL_Helpers {
@@ -15,42 +18,48 @@ class WPAL_Helpers {
     public static $db_table;
 
     /**
-     * Initialize helpers
+     * Initialize
      */
     public static function init() {
         global $wpdb;
-        self::$db_table = $wpdb->prefix . 'activity_logs';
+        self::$db_table = $wpdb->prefix . 'wpal_logs';
     }
 
     /**
-     * Create database tables
+     * Create tables
      */
     public static function create_tables() {
         global $wpdb;
+        $table_name = $wpdb->prefix . 'wpal_logs';
         
         $charset_collate = $wpdb->get_charset_collate();
         
-        $table_name = $wpdb->prefix . 'activity_logs';
-        
         $sql = "CREATE TABLE $table_name (
-            id bigint(20) NOT NULL AUTO_INCREMENT,
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
             time datetime NOT NULL,
-            user_id bigint(20) NOT NULL,
-            username varchar(60) NOT NULL,
-            user_role varchar(255) NOT NULL,
+            user_id bigint(20) unsigned DEFAULT NULL,
+            username varchar(60) DEFAULT NULL,
+            user_role varchar(60) DEFAULT NULL,
             action varchar(255) NOT NULL,
-            object_type varchar(255) NOT NULL,
-            object_id bigint(20) NOT NULL,
-            object_name varchar(255) NOT NULL,
-            context longtext NOT NULL,
-            ip varchar(45) NOT NULL,
-            browser varchar(255) NOT NULL,
-            severity varchar(20) NOT NULL,
+            description text NOT NULL,
+            severity varchar(20) NOT NULL DEFAULT 'info',
+            ip varchar(45) DEFAULT NULL,
+            location varchar(255) DEFAULT NULL,
+            country varchar(100) DEFAULT NULL,
+            country_code varchar(10) DEFAULT NULL,
+            object_type varchar(50) DEFAULT NULL,
+            object_id bigint(20) unsigned DEFAULT NULL,
+            object_name varchar(255) DEFAULT NULL,
+            context longtext DEFAULT NULL,
             PRIMARY KEY  (id),
             KEY time (time),
             KEY user_id (user_id),
             KEY action (action),
-            KEY severity (severity)
+            KEY severity (severity),
+            KEY ip (ip),
+            KEY country_code (country_code),
+            KEY object_type (object_type),
+            KEY object_id (object_id)
         ) $charset_collate;";
         
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
@@ -60,174 +69,99 @@ class WPAL_Helpers {
     /**
      * Log activity
      */
-    public static function log_activity($action, $message = '', $severity = 'info', $object_type = '', $object_id = 0, $object_name = '', $context = array()) {
+    public static function log_activity($action, $description, $severity = 'info', $args = array()) {
         global $wpdb;
-        
-        // Initialize table name
         self::init();
         
-        // Get current user
-        $current_user = wp_get_current_user();
-        $user_id = $current_user->ID;
-        $username = $current_user->user_login;
-        $user_role = !empty($current_user->roles) ? implode(', ', $current_user->roles) : 'guest';
-        
-        // If no user is logged in
-        if ($user_id === 0) {
-            $username = 'Guest';
-            $user_role = 'guest';
+        // Get current user if not provided
+        if (!isset($args['user_id'])) {
+            $user = wp_get_current_user();
+            $args['user_id'] = $user->ID;
+            $args['username'] = $user->ID ? $user->user_login : 'Guest';
+            
+            // Get user role
+            if ($user->ID) {
+                $user_roles = $user->roles;
+                $args['user_role'] = !empty($user_roles) ? $user_roles[0] : '';
+            } else {
+                $args['user_role'] = 'guest';
+            }
         }
         
-        // Get IP address
-        $ip = self::get_ip_address();
+        // Get IP if not provided
+        if (!isset($args['ip'])) {
+            $args['ip'] = self::get_ip_address();
+        }
         
-        // Get browser
-        $browser = self::get_browser();
-        
-        // Prepare context
-        $context_json = !empty($context) ? json_encode($context) : '{}';
-        
-        // Insert log
-        $wpdb->insert(
-            self::$db_table,
-            array(
-                'time' => current_time('mysql'),
-                'user_id' => $user_id,
-                'username' => $username,
-                'user_role' => $user_role,
-                'action' => $action,
-                'object_type' => $object_type,
-                'object_id' => $object_id,
-                'object_name' => $object_name,
-                'context' => $context_json,
-                'ip' => $ip,
-                'browser' => $browser,
-                'severity' => $severity
-            ),
-            array(
-                '%s', '%d', '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s'
-            )
+        // Prepare data
+        $data = array(
+            'time' => current_time('mysql'),
+            'user_id' => isset($args['user_id']) ? $args['user_id'] : null,
+            'username' => isset($args['username']) ? $args['username'] : null,
+            'user_role' => isset($args['user_role']) ? $args['user_role'] : null,
+            'action' => $action,
+            'description' => $description,
+            'severity' => $severity,
+            'ip' => isset($args['ip']) ? $args['ip'] : null,
+            'location' => isset($args['location']) ? $args['location'] : null,
+            'country' => isset($args['country']) ? $args['country'] : null,
+            'country_code' => isset($args['country_code']) ? $args['country_code'] : null,
+            'object_type' => isset($args['object_type']) ? $args['object_type'] : null,
+            'object_id' => isset($args['object_id']) ? $args['object_id'] : null,
+            'object_name' => isset($args['object_name']) ? $args['object_name'] : null,
+            'context' => isset($args['context']) ? (is_array($args['context']) || is_object($args['context']) ? json_encode($args['context']) : $args['context']) : null
         );
         
-        // Trigger notification for errors
-        if ($severity === 'error') {
-            do_action('wpal_error_logged', $action, $message, $context);
+        // Insert log
+        $wpdb->insert(self::$db_table, $data);
+        
+        // Get log ID
+        $log_id = $wpdb->insert_id;
+        
+        // Trigger action
+        do_action('wpal_after_log_activity', $log_id, $action, $description, $severity, $args);
+        
+        return $log_id;
+    }
+
+    /**
+     * Format datetime
+     */
+    public static function format_datetime($datetime, $format = '') {
+        if (empty($format)) {
+            $format = get_option('date_format') . ' ' . get_option('time_format');
         }
         
-        return $wpdb->insert_id;
+        $timestamp = strtotime($datetime);
+        
+        return date_i18n($format, $timestamp);
     }
 
     /**
      * Get IP address
      */
     public static function get_ip_address() {
-        $ip = '';
+        // Check for CloudFlare IP
+        $ip = isset($_SERVER['HTTP_CF_CONNECTING_IP']) ? $_SERVER['HTTP_CF_CONNECTING_IP'] : '';
         
-        // Check for shared internet/ISP IP
-        if (!empty($_SERVER['HTTP_CLIENT_IP']) && self::validate_ip($_SERVER['HTTP_CLIENT_IP'])) {
-            $ip = $_SERVER['HTTP_CLIENT_IP'];
-        }
-        
-        // Check for IPs passing through proxies
-        elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-            // Check if multiple IPs exist in HTTP_X_FORWARDED_FOR
-            $iplist = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
-            foreach ($iplist as $ip) {
-                if (self::validate_ip($ip)) {
-                    break;
-                }
+        // Check for proxy headers
+        if (empty($ip) && isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
+            
+            // Check if multiple IPs are set and get the first one
+            if (strpos($ip, ',') !== false) {
+                $ip = explode(',', $ip)[0];
             }
         }
         
-        // Check for the remote address
-        elseif (!empty($_SERVER['REMOTE_ADDR']) && self::validate_ip($_SERVER['REMOTE_ADDR'])) {
+        // Check for remote address
+        if (empty($ip) && isset($_SERVER['REMOTE_ADDR'])) {
             $ip = $_SERVER['REMOTE_ADDR'];
         }
         
-        // Fallback
-        if (empty($ip)) {
-            $ip = '0.0.0.0';
-        }
+        // Validate IP
+        $ip = filter_var($ip, FILTER_VALIDATE_IP);
         
-        return $ip;
-    }
-
-    /**
-     * Validate IP address
-     */
-    public static function validate_ip($ip) {
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_IPV6 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
-            return false;
-        }
-        return true;
-    }
-
-    /**
-     * Get browser
-     */
-    public static function get_browser() {
-        $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '';
-        
-        if (empty($user_agent)) {
-            return 'Unknown';
-        }
-        
-        $browser = 'Unknown';
-        
-        $browsers = array(
-            'Edge' => 'Edge',
-            'Firefox' => 'Firefox',
-            'Chrome' => 'Chrome',
-            'Opera Mini' => 'Opera Mini',
-            'Opera' => 'Opera',
-            'Safari' => 'Safari',
-            'MSIE' => 'Internet Explorer',
-            'Trident/7.0' => 'Internet Explorer'
-        );
-        
-        foreach ($browsers as $key => $value) {
-            if (strpos($user_agent, $key) !== false) {
-                $browser = $value;
-                break;
-            }
-        }
-        
-        return $browser;
-    }
-
-    /**
-     * Format datetime
-     */
-    public static function format_datetime($datetime) {
-        $timestamp = strtotime($datetime);
-        return date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $timestamp);
-    }
-
-    /**
-     * Clean old logs
-     */
-    public static function clean_old_logs() {
-        global $wpdb;
-        
-        // Initialize table name
-        self::init();
-        
-        // Get retention period
-        $settings = get_option('wpal_settings', array());
-        $retention_period = isset($settings['retention_period']) ? intval($settings['retention_period']) : 30;
-        
-        // If retention period is 0, keep logs indefinitely
-        if ($retention_period <= 0) {
-            return;
-        }
-        
-        // Calculate cutoff date
-        $cutoff_date = date('Y-m-d H:i:s', strtotime("-$retention_period days"));
-        
-        // Delete old logs
-        $wpdb->query($wpdb->prepare(
-            "DELETE FROM " . self::$db_table . " WHERE time < %s",
-            $cutoff_date
-        ));
+        return $ip ?: '';
     }
 }
