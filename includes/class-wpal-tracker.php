@@ -1,11 +1,14 @@
 <?php
 /**
- * Tracker class for WP Activity Logger Pro
+ * WP Activity Logger Tracker
+ *
+ * @package WP Activity Logger
+ * @since 1.0.0
  */
 
 // Exit if accessed directly
 if (!defined('ABSPATH')) {
-    exit;
+    exit();
 }
 
 class WPAL_Tracker {
@@ -13,327 +16,1598 @@ class WPAL_Tracker {
      * Constructor
      */
     public function __construct() {
-        // Nothing to do here
-    }
-
-    /**
-     * Initialize tracker
-     */
-    public function init() {
         // Track user login
-        add_action('wp_login', array($this, 'track_login'), 10, 2);
+        add_action('wp_login', array($this, 'track_user_login'), 10, 2);
         
         // Track user logout
-        add_action('wp_logout', array($this, 'track_logout'));
+        add_action('wp_logout', array($this, 'track_user_logout'));
         
         // Track failed login
-        add_action('wp_login_failed', array($this, 'track_login_failed'));
+        add_action('wp_login_failed', array($this, 'track_failed_login'));
         
-        // Track post creation and updates
-        add_action('save_post', array($this, 'track_post_save'), 10, 3);
-        
-        // Track post deletion
-        add_action('delete_post', array($this, 'track_post_delete'));
-        
-        // Track user creation
-        add_action('user_register', array($this, 'track_user_register'));
+        // Track user registration
+        add_action('user_register', array($this, 'track_user_registration'));
         
         // Track user profile update
         add_action('profile_update', array($this, 'track_profile_update'), 10, 2);
         
-        // Track user deletion
-        add_action('delete_user', array($this, 'track_user_delete'));
+        // Track password reset
+        add_action('after_password_reset', array($this, 'track_password_reset'));
         
-        // Track plugin activation
+        // Track post actions
+        add_action('transition_post_status', array($this, 'track_post_status'), 10, 3);
+        
+        // Track comment actions
+        add_action('wp_insert_comment', array($this, 'track_comment_insert'), 10, 2);
+        add_action('edit_comment', array($this, 'track_comment_update'));
+        add_action('trash_comment', array($this, 'track_comment_trash'));
+        add_action('spam_comment', array($this, 'track_comment_spam'));
+        add_action('unspam_comment', array($this, 'track_comment_unspam'));
+        add_action('delete_comment', array($this, 'track_comment_delete'));
+        
+        // Track plugin actions
         add_action('activated_plugin', array($this, 'track_plugin_activation'));
-        
-        // Track plugin deactivation
         add_action('deactivated_plugin', array($this, 'track_plugin_deactivation'));
         
-        // Track theme switch
+        // Track theme actions
         add_action('switch_theme', array($this, 'track_theme_switch'), 10, 3);
         
         // Track WordPress updates
         add_action('upgrader_process_complete', array($this, 'track_wordpress_update'), 10, 2);
+        
+        // Track user role changes
+        add_action('set_user_role', array($this, 'track_user_role_change'), 10, 3);
+        
+        // Track options changes
+        add_action('updated_option', array($this, 'track_option_update'), 10, 3);
+        
+        // Track file edits
+        add_action('wp_ajax_edit-theme-plugin-file', array($this, 'track_file_edit'), 1);
+        
+        // Track custom events
+        add_action('wpal_track_custom_event', array($this, 'track_custom_event'), 10, 3);
     }
 
     /**
      * Track user login
      */
-    public function track_login($user_login, $user) {
+    public function track_user_login($user_login, $user) {
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Log activity
         WPAL_Helpers::log_activity(
             'user_login',
             sprintf(__('User %s logged in', 'wp-activity-logger-pro'), $user_login),
             'info',
-            'user',
-            $user->ID,
-            $user_login
+            array(
+                'user_id' => $user->ID,
+                'username' => $user_login,
+                'user_role' => $user_data['role'],
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
         );
     }
-
+    
     /**
      * Track user logout
      */
-    public function track_logout() {
-        $current_user = wp_get_current_user();
+    public function track_user_logout() {
+        // Get current user
+        $user = wp_get_current_user();
         
-        if ($current_user->ID === 0) {
+        if ($user->ID === 0) {
             return;
         }
         
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Log activity
         WPAL_Helpers::log_activity(
             'user_logout',
-            sprintf(__('User %s logged out', 'wp-activity-logger-pro'), $current_user->user_login),
+            sprintf(__('User %s logged out', 'wp-activity-logger-pro'), $user->user_login),
             'info',
-            'user',
-            $current_user->ID,
-            $current_user->user_login
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
         );
     }
-
+    
     /**
      * Track failed login
      */
-    public function track_login_failed($username) {
+    public function track_failed_login($username) {
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Log activity
         WPAL_Helpers::log_activity(
             'login_failed',
             sprintf(__('Failed login attempt for user %s', 'wp-activity-logger-pro'), $username),
             'warning',
-            'user',
-            0,
-            $username
+            array(
+                'username' => $username,
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
         );
     }
-
+    
     /**
-     * Track post save
+     * Track user registration
      */
-    public function track_post_save($post_id, $post, $update) {
-        // Skip auto-saves and revisions
-        if ((defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) || wp_is_post_revision($post_id)) {
+    public function track_user_registration($user_id) {
+        // Get user
+        $user = get_userdata($user_id);
+        
+        if (!$user) {
             return;
         }
         
-        // Skip if post is not published
-        if ($post->post_status !== 'publish') {
-            return;
-        }
+        // Get user data
+        $user_data = $this->get_user_data($user);
         
-        // Get post type label
-        $post_type_obj = get_post_type_object($post->post_type);
-        $post_type_label = $post_type_obj ? $post_type_obj->labels->singular_name : $post->post_type;
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
         
-        if ($update) {
-            WPAL_Helpers::log_activity(
-                'post_updated',
-                sprintf(__('%s "%s" updated', 'wp-activity-logger-pro'), $post_type_label, $post->post_title),
-                'info',
-                $post->post_type,
-                $post_id,
-                $post->post_title
-            );
-        } else {
-            WPAL_Helpers::log_activity(
-                'post_created',
-                sprintf(__('%s "%s" created', 'wp-activity-logger-pro'), $post_type_label, $post->post_title),
-                'info',
-                $post->post_type,
-                $post_id,
-                $post->post_title
-            );
-        }
+        // Log activity
+        WPAL_Helpers::log_activity(
+            'user_registered',
+            sprintf(__('New user registered: %s', 'wp-activity-logger-pro'), $user->user_login),
+            'info',
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'user_email' => $user->user_email,
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
+        );
     }
-
+    
     /**
-     * Track post delete
+     * Track profile update
      */
-    public function track_post_delete($post_id) {
-        $post = get_post($post_id);
+    public function track_profile_update($user_id, $old_user_data) {
+        // Get user
+        $user = get_userdata($user_id);
+        
+        if (!$user) {
+            return;
+        }
+        
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Log activity
+        WPAL_Helpers::log_activity(
+            'profile_updated',
+            sprintf(__('User profile updated: %s', 'wp-activity-logger-pro'), $user->user_login),
+            'info',
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
+        );
+    }
+    
+    /**
+     * Track password reset
+     */
+    public function track_password_reset($user) {
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Log activity
+        WPAL_Helpers::log_activity(
+            'password_reset',
+            sprintf(__('Password reset for user %s', 'wp-activity-logger-pro'), $user->user_login),
+            'info',
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
+        );
+    }
+    
+    /**
+     * Track post status changes
+     */
+    public function track_post_status($new_status, $old_status, $post) {
+        // Skip auto-drafts and revisions
+        if ($post->post_type === 'revision' || $post->post_status === 'auto-draft') {
+            return;
+        }
+        
+        // Skip if status hasn't changed
+        if ($new_status === $old_status) {
+            return;
+        }
+        
+        // Get current user
+        $user = wp_get_current_user();
+        
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Determine action
+        $action = '';
+        $message = '';
+        
+        if ($old_status === 'new' && $new_status === 'auto-draft') {
+            return; // Skip auto-drafts
+        } elseif ($old_status === 'auto-draft' && $new_status === 'draft') {
+            $action = 'post_created';
+            $message = sprintf(__('%s created: %s', 'wp-activity-logger-pro'), ucfirst($post->post_type), $post->post_title);
+        } elseif ($new_status === 'publish' && $old_status !== 'publish') {
+            $action = 'post_published';
+            $message = sprintf(__('%s published: %s', 'wp-activity-logger-pro'), ucfirst($post->post_type), $post->post_title);
+        } elseif ($old_status === 'publish' && $new_status !== 'publish') {
+            $action = 'post_unpublished';
+            $message = sprintf(__('%s unpublished: %s', 'wp-activity-logger-pro'), ucfirst($post->post_type), $post->post_title);
+        } elseif ($new_status === 'trash') {
+            $action = 'post_trashed';
+            $message = sprintf(__('%s moved to trash: %s', 'wp-activity-logger-pro'), ucfirst($post->post_type), $post->post_title);
+        } elseif ($old_status === 'trash' && $new_status !== 'trash') {
+            $action = 'post_restored';
+            $message = sprintf(__('%s restored from trash: %s', 'wp-activity-logger-pro'), ucfirst($post->post_type), $post->post_title);
+        } else {
+            $action = 'post_updated';
+            $message = sprintf(__('%s updated: %s', 'wp-activity-logger-pro'), ucfirst($post->post_type), $post->post_title);
+        }
+        
+        // Log activity
+        WPAL_Helpers::log_activity(
+            $action,
+            $message,
+            'info',
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'post_id' => $post->ID,
+                'post_title' => $post->post_title,
+                'post_type' => $post->post_type,
+                'old_status' => $old_status,
+                'new_status' => $new_status,
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
+        );
+    }
+    
+    /**
+     * Track comment insert
+     */
+    public function track_comment_insert($comment_id, $comment) {
+        // Get current user
+        $user = wp_get_current_user();
+        
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Get post
+        $post = get_post($comment->comment_post_ID);
         
         if (!$post) {
             return;
         }
         
-        // Get post type label
-        $post_type_obj = get_post_type_object($post->post_type);
-        $post_type_label = $post_type_obj ? $post_type_obj->labels->singular_name : $post->post_type;
-        
+        // Log activity
         WPAL_Helpers::log_activity(
-            'post_deleted',
-            sprintf(__('%s "%s" deleted', 'wp-activity-logger-pro'), $post_type_label, $post->post_title),
-            'warning',
-            $post->post_type,
-            $post_id,
-            $post->post_title
-        );
-    }
-
-    /**
-     * Track user register
-     */
-    public function track_user_register($user_id) {
-        $user = get_userdata($user_id);
-        
-        if (!$user) {
-            return;
-        }
-        
-        WPAL_Helpers::log_activity(
-            'user_registered',
-            sprintf(__('User %s registered', 'wp-activity-logger-pro'), $user->user_login),
+            'comment_added',
+            sprintf(__('Comment added to %s: %s', 'wp-activity-logger-pro'), $post->post_title, wp_trim_words($comment->comment_content, 10)),
             'info',
-            'user',
-            $user_id,
-            $user->user_login
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'comment_id' => $comment_id,
+                'comment_author' => $comment->comment_author,
+                'comment_content' => wp_trim_words($comment->comment_content, 20),
+                'post_id' => $post->ID,
+                'post_title' => $post->post_title,
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
         );
     }
-
+    
     /**
-     * Track profile update
+     * Track comment update
      */
-    public function track_profile_update($user_id, $old_user_data) {
-        $user = get_userdata($user_id);
+    public function track_comment_update($comment_id) {
+        // Get comment
+        $comment = get_comment($comment_id);
         
-        if (!$user) {
+        if (!$comment) {
             return;
         }
         
+        // Get current user
+        $user = wp_get_current_user();
+        
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Get post
+        $post = get_post($comment->comment_post_ID);
+        
+        if (!$post) {
+            return;
+        }
+        
+        // Log activity
         WPAL_Helpers::log_activity(
-            'profile_updated',
-            sprintf(__('User %s profile updated', 'wp-activity-logger-pro'), $user->user_login),
+            'comment_updated',
+            sprintf(__('Comment updated on %s', 'wp-activity-logger-pro'), $post->post_title),
             'info',
-            'user',
-            $user_id,
-            $user->user_login
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'comment_id' => $comment_id,
+                'comment_author' => $comment->comment_author,
+                'comment_content' => wp_trim_words($comment->comment_content, 20),
+                'post_id' => $post->ID,
+                'post_title' => $post->post_title,
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
         );
     }
-
+    
     /**
-     * Track user delete
+     * Track comment trash
      */
-    public function track_user_delete($user_id) {
-        $user = get_userdata($user_id);
+    public function track_comment_trash($comment_id) {
+        // Get comment
+        $comment = get_comment($comment_id);
         
-        if (!$user) {
+        if (!$comment) {
             return;
         }
         
+        // Get current user
+        $user = wp_get_current_user();
+        
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Get post
+        $post = get_post($comment->comment_post_ID);
+        
+        if (!$post) {
+            return;
+        }
+        
+        // Log activity
         WPAL_Helpers::log_activity(
-            'user_deleted',
-            sprintf(__('User %s deleted', 'wp-activity-logger-pro'), $user->user_login),
-            'warning',
-            'user',
-            $user_id,
-            $user->user_login
+            'comment_trashed',
+            sprintf(__('Comment trashed on %s', 'wp-activity-logger-pro'), $post->post_title),
+            'info',
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'comment_id' => $comment_id,
+                'comment_author' => $comment->comment_author,
+                'post_id' => $post->ID,
+                'post_title' => $post->post_title,
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
         );
     }
-
+    
+    /**
+     * Track comment spam
+     */
+    public function track_comment_spam($comment_id) {
+        // Get comment
+        $comment = get_comment($comment_id);
+        
+        if (!$comment) {
+            return;
+        }
+        
+        // Get current user
+        $user = wp_get_current_user();
+        
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Get post
+        $post = get_post($comment->comment_post_ID);
+        
+        if (!$post) {
+            return;
+        }
+        
+        // Log activity
+        WPAL_Helpers::log_activity(
+            'comment_spam',
+            sprintf(__('Comment marked as spam on %s', 'wp-activity-logger-pro'), $post->post_title),
+            'info',
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'comment_id' => $comment_id,
+                'comment_author' => $comment->comment_author,
+                'post_id' => $post->ID,
+                'post_title' => $post->post_title,
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
+        );
+    }
+    
+    /**
+     * Track comment unspam
+     */
+    public function track_comment_unspam($comment_id) {
+        // Get comment
+        $comment = get_comment($comment_id);
+        
+        if (!$comment) {
+            return;
+        }
+        
+        // Get current user
+        $user = wp_get_current_user();
+        
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Get post
+        $post = get_post($comment->comment_post_ID);
+        
+        if (!$post) {
+            return;
+        }
+        
+        // Log activity
+        WPAL_Helpers::log_activity(
+            'comment_unspam',
+            sprintf(__('Comment unmarked as spam on %s', 'wp-activity-logger-pro'), $post->post_title),
+            'info',
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'comment_id' => $comment_id,
+                'comment_author' => $comment->comment_author,
+                'post_id' => $post->ID,
+                'post_title' => $post->post_title,
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
+        );
+    }
+    
+    /**
+     * Track comment delete
+     */
+    public function track_comment_delete($comment_id) {
+        // Get comment
+        $comment = get_comment($comment_id);
+        
+        if (!$comment) {
+            return;
+        }
+        
+        // Get current user
+        $user = wp_get_current_user();
+        
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Get post
+        $post = get_post($comment->comment_post_ID);
+        
+        if (!$post) {
+            return;
+        }
+        
+        // Log activity
+        WPAL_Helpers::log_activity(
+            'comment_deleted',
+            sprintf(__('Comment deleted from %s', 'wp-activity-logger-pro'), $post->post_title),
+            'info',
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'comment_id' => $comment_id,
+                'comment_author' => $comment->comment_author,
+                'post_id' => $post->ID,
+                'post_title' => $post->post_title,
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
+        );
+    }
+    
     /**
      * Track plugin activation
      */
     public function track_plugin_activation($plugin) {
+        // Get plugin data
         $plugin_data = get_plugin_data(WP_PLUGIN_DIR . '/' . $plugin);
-        $plugin_name = !empty($plugin_data['Name']) ? $plugin_data['Name'] : $plugin;
         
+        // Get current user
+        $user = wp_get_current_user();
+        
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Log activity
         WPAL_Helpers::log_activity(
             'plugin_activated',
-            sprintf(__('Plugin "%s" activated', 'wp-activity-logger-pro'), $plugin_name),
+            sprintf(__('Plugin activated: %s', 'wp-activity-logger-pro'), $plugin_data['Name']),
             'info',
-            'plugin',
-            0,
-            $plugin_name
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'plugin' => $plugin,
+                'plugin_name' => $plugin_data['Name'],
+                'plugin_version' => $plugin_data['Version'],
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
         );
     }
-
+    
     /**
      * Track plugin deactivation
      */
     public function track_plugin_deactivation($plugin) {
+        // Get plugin data
         $plugin_data = get_plugin_data(WP_PLUGIN_DIR . '/' . $plugin);
-        $plugin_name = !empty($plugin_data['Name']) ? $plugin_data['Name'] : $plugin;
         
+        // Get current user
+        $user = wp_get_current_user();
+        
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Log activity
         WPAL_Helpers::log_activity(
             'plugin_deactivated',
-            sprintf(__('Plugin "%s" deactivated', 'wp-activity-logger-pro'), $plugin_name),
+            sprintf(__('Plugin deactivated: %s', 'wp-activity-logger-pro'), $plugin_data['Name']),
             'info',
-            'plugin',
-            0,
-            $plugin_name
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'plugin' => $plugin,
+                'plugin_name' => $plugin_data['Name'],
+                'plugin_version' => $plugin_data['Version'],
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
         );
     }
-
+    
     /**
      * Track theme switch
      */
-    public function track_theme_switch($new_theme_name, $new_theme, $old_theme) {
-        $old_theme_name = $old_theme ? $old_theme->get('Name') : __('Unknown', 'wp-activity-logger-pro');
+    public function track_theme_switch($new_name, $new_theme, $old_theme) {
+        // Get current user
+        $user = wp_get_current_user();
         
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Log activity
         WPAL_Helpers::log_activity(
             'theme_switched',
-            sprintf(__('Theme switched from "%s" to "%s"', 'wp-activity-logger-pro'), $old_theme_name, $new_theme_name),
+            sprintf(__('Theme switched from %s to %s', 'wp-activity-logger-pro'), $old_theme->get('Name'), $new_name),
             'info',
-            'theme',
-            0,
-            $new_theme_name
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'old_theme' => $old_theme->get('Name'),
+                'new_theme' => $new_name,
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
         );
     }
-
+    
     /**
      * Track WordPress update
      */
     public function track_wordpress_update($upgrader, $options) {
-        if (!isset($options['action']) || $options['action'] !== 'update') {
+        // Skip if not a core update
+        if (!isset($options['type']) || $options['type'] !== 'core') {
             return;
         }
         
-        // WordPress core update
-        if ($options['type'] === 'core') {
-            $wp_version = get_bloginfo('version');
-            
-            WPAL_Helpers::log_activity(
-                'wordpress_updated',
-                sprintf(__('WordPress updated to version %s', 'wp-activity-logger-pro'), $wp_version),
-                'info',
-                'core',
-                0,
-                $wp_version
+        // Get current user
+        $user = wp_get_current_user();
+        
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Log activity
+        WPAL_Helpers::log_activity(
+            'wordpress_updated',
+            sprintf(__('WordPress updated to version %s', 'wp-activity-logger-pro'), get_bloginfo('version')),
+            'info',
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'version' => get_bloginfo('version'),
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
+        );
+    }
+    
+    /**
+     * Track user role change
+     */
+    public function track_user_role_change($user_id, $role, $old_roles) {
+        // Get user
+        $user = get_userdata($user_id);
+        
+        if (!$user) {
+            return;
+        }
+        
+        // Get current user
+        $current_user = wp_get_current_user();
+        
+        // Get user data
+        $user_data = $this->get_user_data($current_user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Log activity
+        WPAL_Helpers::log_activity(
+            'user_role_changed',
+            sprintf(__('User role changed for %s from %s to %s', 'wp-activity-logger-pro'), $user->user_login, implode(', ', $old_roles), $role),
+            'info',
+            array(
+                'user_id' => $current_user->ID,
+                'username' => $current_user->user_login,
+                'user_role' => $user_data['role'],
+                'target_user_id' => $user_id,
+                'target_username' => $user->user_login,
+                'old_role' => implode(', ', $old_roles),
+                'new_role' => $role,
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code'],
+                'context' => json_encode(array(
+                    'old_role' => implode(', ', $old_roles),
+                    'new_role' => $role
+                ))
+            )
+        );
+    }
+    
+    /**
+     * Track option update
+     */
+    public function track_option_update($option, $old_value, $value) {
+        // Skip some options
+        $skip_options = array(
+            '_transient_',
+            '_site_transient_',
+            'cron',
+            'active_plugins',
+            'recently_activated',
+            'uninstall_plugins',
+            'widget_',
+            'theme_mods_',
+            'wpal_',
+            'wp_activity_logger_',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_',
+            'wp_mail_smtp_debug_log_events_',
+            'wp_mail_smtp_debug_log_events',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp',
+            'wp_mail_smtp_',
+            'wp_mail_smtp_debug',
+            'wp_mail_smtp_debug_events',
+            'wp_mail_smtp_debug_events_',
+            'wp_mail_smtp_debug_',
+            'wp_mail_smtp_debug_log',
+            'wp_mail_smtp_debug_log_',
+        );
+        
+        foreach ($skip_options as $skip_option) {
+            if (strpos($option, $skip_option) === 0) {
+                return;
+            }
+        }
+        
+        // Get current user
+        $user = wp_get_current_user();
+        
+        // Skip if no user is logged in
+        if ($user->ID === 0) {
+            return;
+        }
+        
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Format values for logging
+        $old_value_formatted = $this->format_option_value($old_value);
+        $value_formatted = $this->format_option_value($value);
+        
+        // Log activity
+        WPAL_Helpers::log_activity(
+            'option_updated',
+            sprintf(__('Option updated: %s', 'wp-activity-logger-pro'), $option),
+            'info',
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'option' => $option,
+                'old_value' => $old_value_formatted,
+                'new_value' => $value_formatted,
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code']
+            )
+        );
+    }
+    
+    /**
+     * Format option value for logging
+     */
+    private function format_option_value($value) {
+        if (is_array($value) || is_object($value)) {
+            return '[Complex Value]';
+        } elseif (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        } elseif (is_null($value)) {
+            return 'null';
+        } else {
+            return substr((string) $value, 0, 100);
+        }
+    }
+    
+    /**
+     * Track file edit
+     */
+    public function track_file_edit() {
+        // Check if this is a file edit request
+        if (!isset($_POST['action']) || $_POST['action'] !== 'edit-theme-plugin-file') {
+            return;
+        }
+        
+        // Check if file is set
+        if (!isset($_POST['file'])) {
+            return;
+        }
+        
+        // Get file
+        $file = sanitize_text_field($_POST['file']);
+        
+        // Get current user
+        $user = wp_get_current_user();
+        
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Determine file type
+        $file_type = '';
+        $action = '';
+        
+        if (strpos($file, 'wp-content/themes/') !== false) {
+            $file_type = 'theme';
+            $action = 'theme_edited';
+        } elseif (strpos($file, 'wp-content/plugins/') !== false) {
+            $file_type = 'plugin';
+            $action = 'plugin_edited';
+        } else {
+            $file_type = 'file';
+            $action = 'file_edited';
+        }
+        
+        // Log activity
+        WPAL_Helpers::log_activity(
+            $action,
+            sprintf(__('%s edited: %s', 'wp-activity-logger-pro'), ucfirst($file_type), $file),
+            'warning',
+            array(
+                'user_id' => $user->ID,
+                'username' => $user->user_login,
+                'user_role' => $user_data['role'],
+                'file' => $file,
+                'file_type' => $file_type,
+                'ip' => $geo_data['ip'],
+                'location' => $geo_data['location'],
+                'country' => $geo_data['country'],
+                'country_code' => $geo_data['country_code'],
+                'object_type' => $file_type,
+                'object_name' => $file
+            )
+        );
+    }
+    
+    /**
+     * Track custom event
+     */
+    public function track_custom_event($action, $description, $severity = 'info', $context = array()) {
+        // Get current user
+        $user = wp_get_current_user();
+        
+        // Get user data
+        $user_data = $this->get_user_data($user);
+        
+        // Get geolocation data
+        $geo_data = $this->get_geolocation_data();
+        
+        // Add user and geolocation data to context
+        $context = array_merge($context, array(
+            'user_id' => $user->ID,
+            'username' => $user->user_login,
+            'user_role' => $user_data['role'],
+            'ip' => $geo_data['ip'],
+            'location' => $geo_data['location'],
+            'country' => $geo_data['country'],
+            'country_code' => $geo_data['country_code']
+        ));
+        
+        // Log activity
+        WPAL_Helpers::log_activity(
+            $action,
+            $description,
+            $severity,
+            $context
+        );
+    }
+    
+    /**
+     * Get user data
+     */
+    private function get_user_data($user) {
+        if (!$user || !$user->ID) {
+            return array(
+                'role' => 'guest',
+                'roles' => array('guest'),
+                'capabilities' => array()
             );
         }
         
-        // Plugin updates
-        if ($options['type'] === 'plugin' && !empty($options['plugins'])) {
-            foreach ($options['plugins'] as $plugin) {
-                $plugin_data = get_plugin_data(WP_PLUGIN_DIR . '/' . $plugin);
-                $plugin_name = !empty($plugin_data['Name']) ? $plugin_data['Name'] : $plugin;
-                $plugin_version = !empty($plugin_data['Version']) ? $plugin_data['Version'] : '';
-                
-                WPAL_Helpers::log_activity(
-                    'plugin_updated',
-                    sprintf(__('Plugin "%s" updated to version %s', 'wp-activity-logger-pro'), $plugin_name, $plugin_version),
-                    'info',
-                    'plugin',
-                    0,
-                    $plugin_name
+        // Get user roles
+        $roles = (array) $user->roles;
+        
+        // Get primary role
+        $role = !empty($roles) ? $roles[0] : '';
+        
+        return array(
+            'role' => $role,
+            'roles' => $roles,
+            'capabilities' => (array) $user->allcaps
+        );
+    }
+    
+    /**
+     * Get geolocation data
+     */
+    private function get_geolocation_data() {
+        // Get IP address
+        $ip = $this->get_ip_address();
+        
+        // Check if geolocation is enabled
+        $options = get_option('wpal_options', array());
+        $enable_geolocation = isset($options['enable_geolocation']) ? (bool) $options['enable_geolocation'] : true;
+        
+        if (!$enable_geolocation) {
+            return array(
+                'ip' => $ip,
+                'location' => '',
+                'country' => '',
+                'country_code' => ''
+            );
+        }
+        
+        // Try to get from cache
+        $cache_key = 'wpal_geo_' . md5($ip);
+        $cached = get_transient($cache_key);
+        
+        if ($cached !== false) {
+            return array(
+                'ip' => $ip,
+                'location' => $cached['city'] . ', ' . $cached['region'] . ', ' . $cached['country'],
+                'country' => $cached['country'],
+                'country_code' => $cached['country_code']
+            );
+        }
+        
+        // Check if IP is local
+        if (empty($ip) || $ip === '127.0.0.1' || $ip === '::1') {
+            return array(
+                'ip' => $ip,
+                'location' => 'Local',
+                'country' => 'Local',
+                'country_code' => 'LO'
+            );
+        }
+        
+        // Try to get geolocation data
+        if (class_exists('WPAL_Geolocation')) {
+            $geolocation = new WPAL_Geolocation();
+            $geo_data = $geolocation->get_ip_geolocation($ip);
+            
+            if (!is_wp_error($geo_data)) {
+                return array(
+                    'ip' => $ip,
+                    'location' => $geo_data['city'] . ', ' . $geo_data['region'] . ', ' . $geo_data['country'],
+                    'country' => $geo_data['country'],
+                    'country_code' => $geo_data['country_code']
                 );
             }
         }
         
-        // Theme updates
-        if ($options['type'] === 'theme' && !empty($options['themes'])) {
-            foreach ($options['themes'] as $theme) {
-                $theme_data = wp_get_theme($theme);
-                $theme_name = $theme_data->get('Name');
-                $theme_version = $theme_data->get('Version');
-                
-                WPAL_Helpers::log_activity(
-                    'theme_updated',
-                    sprintf(__('Theme "%s" updated to version %s', 'wp-activity-logger-pro'), $theme_name, $theme_version),
-                    'info',
-                    'theme',
-                    0,
-                    $theme_name
-                );
+        // Fallback
+        return array(
+            'ip' => $ip,
+            'location' => '',
+            'country' => '',
+            'country_code' => ''
+        );
+    }
+    
+    /**
+     * Get IP address
+     */
+    private function get_ip_address() {
+        // Check for CloudFlare IP
+        $ip = isset($_SERVER['HTTP_CF_CONNECTING_IP']) ? $_SERVER['HTTP_CF_CONNECTING_IP'] : '';
+        
+        // Check for proxy headers
+        if (empty($ip) && isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
+            
+            // Check if multiple IPs are set and get the first one
+            if (strpos($ip, ',') !== false) {
+                $ip = explode(',', $ip)[0];
             }
         }
+        
+        // Check for remote address
+        if (empty($ip) && isset($_SERVER['REMOTE_ADDR'])) {
+            $ip = $_SERVER['REMOTE_ADDR'];
+        }
+        
+        // Validate IP
+        $ip = filter_var($ip, FILTER_VALIDATE_IP);
+        
+        return $ip ?: '';
     }
 }
