@@ -117,7 +117,7 @@ if (isset($_POST['wpal_run_diagnostics'])) {
     <div class="wpal-dashboard-header">
         <h1 class="wpal-dashboard-title"><?php _e('Diagnostics', 'wp-activity-logger-pro'); ?></h1>
         <div class="wpal-dashboard-actions">
-            <a href="<?php echo admin_url('admin.php?page=wp-activity-logger-pro-dashboard'); ?>" class="wpal-btn wpal-btn-outline-primary">
+            <a href="<?php echo admin_url('admin.php?page=wp-activity-logger-pro'); ?>" class="wpal-btn wpal-btn-outline-primary">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-bar-chart-2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
                 <?php _e('Dashboard', 'wp-activity-logger-pro'); ?>
             </a>
