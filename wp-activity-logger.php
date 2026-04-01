@@ -36,6 +36,8 @@ require_once WPAL_PLUGIN_DIR . 'includes/class-wpal-diagnostics.php';
 require_once WPAL_PLUGIN_DIR . 'includes/class-wpal-geolocation.php';
 require_once WPAL_PLUGIN_DIR . 'includes/class-wpal-settings.php';
 require_once WPAL_PLUGIN_DIR . 'includes/class-wpal-archive.php';
+require_once WPAL_PLUGIN_DIR . 'includes/class-wpal-response-actions.php';
+require_once WPAL_PLUGIN_DIR . 'includes/class-wpal-file-integrity.php';
 
 class WP_Activity_Logger_Pro {
     /**
@@ -62,6 +64,8 @@ class WP_Activity_Logger_Pro {
     public $geolocation;
     public $settings;
     public $archive;
+    public $response_actions;
+    public $file_integrity;
 
     /**
      * Get singleton.
@@ -94,6 +98,8 @@ class WP_Activity_Logger_Pro {
         $this->google_search_console = new WPAL_Google_Search_Console();
         $this->diagnostics = new WPAL_Diagnostics();
         $this->archive = new WPAL_Archive();
+        $this->response_actions = new WPAL_Response_Actions();
+        $this->file_integrity = new WPAL_File_Integrity();
 
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
@@ -101,8 +107,10 @@ class WP_Activity_Logger_Pro {
         add_action('plugins_loaded', array($this, 'load_textdomain'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
         add_action('admin_init', array($this, 'maybe_upgrade_schema'));
+        add_filter('cron_schedules', array($this, 'register_cron_schedules'));
         add_action('wp', array($this, 'schedule_cron_jobs'));
         add_action('wpal_daily_cron', array($this, 'run_daily_tasks'));
+        add_action('wpal_weekly_cron', array($this, 'run_weekly_tasks'));
     }
 
     /**
@@ -124,6 +132,9 @@ class WP_Activity_Logger_Pro {
         if (!wp_next_scheduled('wpal_daily_cron')) {
             wp_schedule_event(time(), 'daily', 'wpal_daily_cron');
         }
+        if (!wp_next_scheduled('wpal_weekly_cron')) {
+            wp_schedule_event(time(), 'weekly', 'wpal_weekly_cron');
+        }
     }
 
     /**
@@ -131,6 +142,7 @@ class WP_Activity_Logger_Pro {
      */
     public function deactivate() {
         wp_clear_scheduled_hook('wpal_daily_cron');
+        wp_clear_scheduled_hook('wpal_weekly_cron');
     }
 
     /**
@@ -138,6 +150,23 @@ class WP_Activity_Logger_Pro {
      */
     public function load_textdomain() {
         load_plugin_textdomain('wp-activity-logger-pro', false, dirname(plugin_basename(__FILE__)) . '/languages');
+    }
+
+    /**
+     * Register custom cron intervals.
+     *
+     * @param array $schedules Schedules.
+     * @return array
+     */
+    public function register_cron_schedules($schedules) {
+        if (!isset($schedules['weekly'])) {
+            $schedules['weekly'] = array(
+                'interval' => WEEK_IN_SECONDS,
+                'display' => __('Once Weekly', 'wp-activity-logger-pro'),
+            );
+        }
+
+        return $schedules;
     }
 
     /**
@@ -214,6 +243,9 @@ class WP_Activity_Logger_Pro {
         if (!wp_next_scheduled('wpal_daily_cron')) {
             wp_schedule_event(time(), 'daily', 'wpal_daily_cron');
         }
+        if (!wp_next_scheduled('wpal_weekly_cron')) {
+            wp_schedule_event(time(), 'weekly', 'wpal_weekly_cron');
+        }
     }
 
     /**
@@ -228,25 +260,59 @@ class WP_Activity_Logger_Pro {
     }
 
     /**
+     * Run weekly tasks.
+     */
+    public function run_weekly_tasks() {
+        do_action('wpal_weekly_cron');
+    }
+
+    /**
      * Clean up expired logs.
      */
     private function cleanup_old_logs() {
         $settings = WPAL_Helpers::get_settings();
-        $retention_days = isset($settings['log_retention']) ? absint($settings['log_retention']) : 30;
-
-        if ($retention_days < 1) {
-            return;
-        }
 
         global $wpdb;
         WPAL_Helpers::init();
-
-        $wpdb->query(
-            $wpdb->prepare(
-                "DELETE FROM " . WPAL_Helpers::$db_table . " WHERE time < DATE_SUB(NOW(), INTERVAL %d DAY)",
-                $retention_days
-            )
+        $rules = array(
+            'info' => isset($settings['retention_info_days']) ? absint($settings['retention_info_days']) : 30,
+            'warning' => isset($settings['retention_warning_days']) ? absint($settings['retention_warning_days']) : 60,
+            'error' => isset($settings['retention_error_days']) ? absint($settings['retention_error_days']) : 90,
+            'critical' => isset($settings['retention_error_days']) ? absint($settings['retention_error_days']) : 90,
         );
+
+        foreach ($rules as $severity => $days) {
+            if ($days > 0) {
+                $wpdb->query(
+                    $wpdb->prepare(
+                        'DELETE FROM ' . WPAL_Helpers::$db_table . ' WHERE severity = %s AND time < DATE_SUB(NOW(), INTERVAL %d DAY)',
+                        $severity,
+                        $days
+                    )
+                );
+            }
+        }
+
+        if (!empty($settings['retention_action_rules'])) {
+            $lines = preg_split('/\r\n|\r|\n/', (string) $settings['retention_action_rules']);
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ('' === $line || false === strpos($line, '=')) {
+                    continue;
+                }
+                list($action, $days) = array_map('trim', explode('=', $line, 2));
+                $days = absint($days);
+                if ($action && $days > 0) {
+                    $wpdb->query(
+                        $wpdb->prepare(
+                            'DELETE FROM ' . WPAL_Helpers::$db_table . ' WHERE action = %s AND time < DATE_SUB(NOW(), INTERVAL %d DAY)',
+                            $action,
+                            $days
+                        )
+                    );
+                }
+            }
+        }
     }
 }
 

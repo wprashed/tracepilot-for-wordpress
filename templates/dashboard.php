@@ -22,11 +22,7 @@ $top_actions = $wpdb->get_results(
     LIMIT 6"
 );
 
-$recent_logs = $wpdb->get_results(
-    "SELECT * FROM $table_name
-    ORDER BY time DESC
-    LIMIT 8"
-);
+$recent_logs = WPAL_Helpers::get_logs(array(), 8);
 ?>
 
 <div class="wrap wpal-wrap">
@@ -147,7 +143,7 @@ $recent_logs = $wpdb->get_results(
                         <button type="button" class="wpal-list-row wpal-list-row-button wpal-view-log" data-log-id="<?php echo esc_attr($log->id); ?>">
                             <div>
                                 <strong><?php echo esc_html($log->action); ?></strong>
-                                <div class="wpal-list-subtext"><?php echo esc_html($log->username); ?> • <?php echo esc_html(WPAL_Helpers::format_datetime($log->time)); ?></div>
+                                <div class="wpal-list-subtext"><?php echo esc_html($log->username); ?> • <?php echo esc_html(WPAL_Helpers::format_datetime($log->time)); ?><?php echo !empty($log->site_label) ? ' • ' . esc_html($log->site_label) : ''; ?></div>
                             </div>
                             <div><?php echo WPAL_Helpers::get_severity_badge($log->severity); ?></div>
                         </button>

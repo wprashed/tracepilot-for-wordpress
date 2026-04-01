@@ -315,6 +315,27 @@ class WPAL_Threat_Detection {
                 );
             }
         }
+
+        $integrity_alerts = $wpdb->get_results("
+            SELECT id, time, username, ip, object_name, action, description
+            FROM $table_name
+            WHERE action IN ('file_integrity_modified', 'file_integrity_deleted', 'file_integrity_new')
+            AND time > DATE_SUB(NOW(), INTERVAL 7 DAY)
+            ORDER BY time DESC
+        ");
+
+        foreach ($integrity_alerts as $alert) {
+            $threats[] = array(
+                'type' => 'file_integrity_alert',
+                'severity' => 'high',
+                'log_id' => $alert->id,
+                'username' => $alert->username,
+                'time' => $alert->time,
+                'ip' => $alert->ip,
+                'file_path' => $alert->object_name,
+                'description' => $alert->description,
+            );
+        }
         
         // Detect privilege escalation
         $role_changes = $wpdb->get_results("
@@ -641,20 +662,12 @@ class WPAL_Threat_Detection {
         if (empty($options['enable_threat_notifications'])) {
             return;
         }
-        
-        // Get notification email
-        $email = !empty($options['notification_email']) ? $options['notification_email'] : get_option('admin_email');
-        
-        // Send email
-        $subject = sprintf(__('[%s] Security Alert: %s', 'wp-activity-logger-pro'), get_bloginfo('name'), $subject);
-        
-        $body = sprintf(__('A security threat has been detected on your WordPress site (%s).', 'wp-activity-logger-pro'), get_bloginfo('url')) . "\n\n";
-        $body .= $message . "\n\n";
-        $body .= sprintf(__('Time: %s', 'wp-activity-logger-pro'), current_time('mysql')) . "\n";
-        $body .= sprintf(__('Threat Type: %s', 'wp-activity-logger-pro'), $type) . "\n\n";
-        $body .= sprintf(__('Please log in to your WordPress admin panel to investigate: %s', 'wp-activity-logger-pro'), admin_url('admin.php?page=wp-activity-logger-pro-threat-detection'));
-        
-        wp_mail($email, $subject, $body);
+
+        if (function_exists('wp_activity_logger_pro') && isset(wp_activity_logger_pro()->notifications)) {
+            wp_activity_logger_pro()->notifications->send_custom_notification($type, $message, 'error', array('subject' => $subject));
+        } else {
+            wp_mail(get_option('admin_email'), $subject, $message);
+        }
     }
     
     /**

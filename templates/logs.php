@@ -16,45 +16,20 @@ $severity_filter = isset($_GET['severity_filter']) ? sanitize_text_field(wp_unsl
 $date_from = isset($_GET['date_from']) ? sanitize_text_field(wp_unslash($_GET['date_from'])) : '';
 $date_to = isset($_GET['date_to']) ? sanitize_text_field(wp_unslash($_GET['date_to'])) : '';
 $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
-
-$where = array('1=1');
-$args = array();
-
-if ($role_filter) {
-    $where[] = 'user_role = %s';
-    $args[] = $role_filter;
-}
-
-if ($severity_filter) {
-    $where[] = 'severity = %s';
-    $args[] = $severity_filter;
-}
-
-if ($date_from) {
-    $where[] = 'time >= %s';
-    $args[] = $date_from . ' 00:00:00';
-}
-
-if ($date_to) {
-    $where[] = 'time <= %s';
-    $args[] = $date_to . ' 23:59:59';
-}
-
-if ($search) {
-    $where[] = '(username LIKE %s OR action LIKE %s OR description LIKE %s)';
-    $like = '%' . $wpdb->esc_like($search) . '%';
-    $args[] = $like;
-    $args[] = $like;
-    $args[] = $like;
-}
-
-$query = "SELECT * FROM $table_name WHERE " . implode(' AND ', $where) . ' ORDER BY time DESC LIMIT 500';
-if (!empty($args)) {
-    $query = $wpdb->prepare($query, $args);
-}
-
-$logs = $wpdb->get_results($query);
+$site_filter = isset($_GET['site_id']) ? absint($_GET['site_id']) : 0;
+$logs = WPAL_Helpers::get_logs(
+    array(
+        'role_filter' => $role_filter,
+        'severity_filter' => $severity_filter,
+        'date_from' => $date_from,
+        'date_to' => $date_to,
+        'search' => $search,
+        'site_id' => $site_filter,
+    ),
+    500
+);
 $roles = $wpdb->get_col("SELECT DISTINCT user_role FROM $table_name WHERE user_role <> '' ORDER BY user_role ASC");
+$sites = is_multisite() ? get_sites(array('number' => 200)) : array();
 
 $severity_rows = $wpdb->get_results("SELECT severity, COUNT(*) AS total FROM $table_name GROUP BY severity");
 $severity_labels = array();
@@ -111,6 +86,17 @@ foreach ($severity_rows as $row) {
                         <option value="error" <?php selected($severity_filter, 'error'); ?>><?php esc_html_e('Error', 'wp-activity-logger-pro'); ?></option>
                     </select>
                 </label>
+                <?php if (is_multisite() && is_network_admin()) : ?>
+                    <label>
+                        <span><?php esc_html_e('Site', 'wp-activity-logger-pro'); ?></span>
+                        <select name="site_id" class="wpal-input">
+                            <option value="0"><?php esc_html_e('All sites', 'wp-activity-logger-pro'); ?></option>
+                            <?php foreach ($sites as $site) : ?>
+                                <option value="<?php echo esc_attr($site->blog_id); ?>" <?php selected($site_filter, (int) $site->blog_id); ?>><?php echo esc_html($site->blogname ? $site->blogname : $site->domain); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                <?php endif; ?>
                 <label>
                     <span><?php esc_html_e('From', 'wp-activity-logger-pro'); ?></span>
                     <input type="text" name="date_from" value="<?php echo esc_attr($date_from); ?>" class="wpal-input wpal-datepicker" placeholder="YYYY-MM-DD">
@@ -176,11 +162,16 @@ foreach ($severity_rows as $row) {
                                 <td><?php echo esc_html($log->action); ?></td>
                                 <td><?php echo esc_html(wp_trim_words($log->description, 14)); ?></td>
                                 <td><?php echo WPAL_Helpers::get_severity_badge($log->severity); ?></td>
-                                <td><?php echo esc_html($log->ip ? $log->ip : '—'); ?></td>
+                                <td>
+                                    <?php echo esc_html($log->ip ? $log->ip : '—'); ?>
+                                    <?php if (!empty($log->site_label)) : ?>
+                                        <div class="wpal-list-subtext"><?php echo esc_html($log->site_label); ?></div>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="wpal-table-actions">
-                                    <button type="button" class="wpal-btn wpal-btn-secondary wpal-view-log" data-log-id="<?php echo esc_attr($log->id); ?>"><?php esc_html_e('View', 'wp-activity-logger-pro'); ?></button>
-                                    <button type="button" class="wpal-btn wpal-btn-secondary wpal-archive-log" data-log-id="<?php echo esc_attr($log->id); ?>"><?php esc_html_e('Archive', 'wp-activity-logger-pro'); ?></button>
-                                    <button type="button" class="wpal-btn wpal-btn-danger wpal-delete-log" data-log-id="<?php echo esc_attr($log->id); ?>"><?php esc_html_e('Delete', 'wp-activity-logger-pro'); ?></button>
+                                    <button type="button" class="wpal-btn wpal-btn-secondary wpal-view-log" data-log-id="<?php echo esc_attr($log->id); ?>" data-site-id="<?php echo esc_attr(isset($log->site_id) ? $log->site_id : 0); ?>"><?php esc_html_e('View', 'wp-activity-logger-pro'); ?></button>
+                                    <button type="button" class="wpal-btn wpal-btn-secondary wpal-archive-log" data-log-id="<?php echo esc_attr($log->id); ?>" data-site-id="<?php echo esc_attr(isset($log->site_id) ? $log->site_id : 0); ?>"><?php esc_html_e('Archive', 'wp-activity-logger-pro'); ?></button>
+                                    <button type="button" class="wpal-btn wpal-btn-danger wpal-delete-log" data-log-id="<?php echo esc_attr($log->id); ?>" data-site-id="<?php echo esc_attr(isset($log->site_id) ? $log->site_id : 0); ?>"><?php esc_html_e('Delete', 'wp-activity-logger-pro'); ?></button>
                                 </td>
                             </tr>
                         <?php endforeach; ?>

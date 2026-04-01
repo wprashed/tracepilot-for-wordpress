@@ -38,8 +38,8 @@ $timeline = $wpdb->get_results(
             (ip <> '' AND ip = %s)
         )
         AND time BETWEEN DATE_SUB(%s, INTERVAL %d HOUR) AND DATE_ADD(%s, INTERVAL %d HOUR)
-        ORDER BY time DESC
-        LIMIT 8",
+        ORDER BY time ASC
+        LIMIT 12",
         $log->id,
         absint($log->user_id),
         $log->ip,
@@ -85,6 +85,16 @@ $timeline = $wpdb->get_results(
                 <dt><?php esc_html_e('Browser', 'wp-activity-logger-pro'); ?></dt>
                 <dd><?php echo esc_html($log->browser ? $log->browser : '—'); ?></dd>
             </dl>
+            <div class="wpal-inline-actions" style="margin-top:14px;">
+                <?php if (!empty($log->ip)) : ?>
+                    <button type="button" class="wpal-btn wpal-btn-secondary wpal-block-ip" data-ip="<?php echo esc_attr($log->ip); ?>"><?php esc_html_e('Block IP', 'wp-activity-logger-pro'); ?></button>
+                <?php endif; ?>
+                <?php if (!empty($log->user_id)) : ?>
+                    <button type="button" class="wpal-btn wpal-btn-secondary wpal-force-logout" data-user-id="<?php echo esc_attr($log->user_id); ?>"><?php esc_html_e('Force Logout', 'wp-activity-logger-pro'); ?></button>
+                    <button type="button" class="wpal-btn wpal-btn-secondary wpal-reset-password" data-user-id="<?php echo esc_attr($log->user_id); ?>"><?php esc_html_e('Reset Password', 'wp-activity-logger-pro'); ?></button>
+                    <button type="button" class="wpal-btn wpal-btn-danger wpal-delete-user-logs" data-user-id="<?php echo esc_attr($log->user_id); ?>"><?php esc_html_e('Delete User Logs', 'wp-activity-logger-pro'); ?></button>
+                <?php endif; ?>
+            </div>
         </div>
     </div>
 
@@ -106,6 +116,7 @@ $timeline = $wpdb->get_results(
                         <div>
                             <strong><?php echo esc_html($entry->action); ?></strong>
                             <div class="wpal-list-subtext"><?php echo esc_html(WPAL_Helpers::format_datetime($entry->time)); ?></div>
+                            <div class="wpal-list-subtext"><?php echo esc_html($entry->description); ?></div>
                         </div>
                         <div><?php echo WPAL_Helpers::get_severity_badge($entry->severity); ?></div>
                     </div>

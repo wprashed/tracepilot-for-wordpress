@@ -8,6 +8,7 @@ if (!defined('ABSPATH')) {
 }
 
 $options = WPAL_Helpers::get_settings();
+$integrity = wp_activity_logger_pro()->file_integrity->get_baseline_status();
 ?>
 
 <div class="wrap wpal-wrap">
@@ -123,6 +124,7 @@ $options = WPAL_Helpers::get_settings();
                                 <th><?php esc_html_e('Description', 'wp-activity-logger-pro'); ?></th>
                                 <th><?php esc_html_e('IP', 'wp-activity-logger-pro'); ?></th>
                                 <th><?php esc_html_e('Time', 'wp-activity-logger-pro'); ?></th>
+                                <th><?php esc_html_e('Actions', 'wp-activity-logger-pro'); ?></th>
                             </tr>
                         </thead>
                         <tbody id="wpal-threats-table"></tbody>
@@ -130,6 +132,27 @@ $options = WPAL_Helpers::get_settings();
                 </div>
             </div>
         </article>
+    </section>
+
+    <section class="wpal-panel">
+        <div class="wpal-panel-head">
+            <div>
+                <h2><?php esc_html_e('File Integrity', 'wp-activity-logger-pro'); ?></h2>
+                <p><?php esc_html_e('Create a baseline of core, plugin, and theme files, then scan for new, deleted, or modified files.', 'wp-activity-logger-pro'); ?></p>
+            </div>
+            <div class="wpal-hero-actions">
+                <button type="button" id="wpal-build-baseline" class="wpal-btn wpal-btn-secondary"><?php esc_html_e('Build Baseline', 'wp-activity-logger-pro'); ?></button>
+                <button type="button" id="wpal-scan-integrity" class="wpal-btn wpal-btn-primary"><?php esc_html_e('Scan Integrity', 'wp-activity-logger-pro'); ?></button>
+            </div>
+        </div>
+        <div class="wpal-note" id="wpal-integrity-status">
+            <?php
+            echo $integrity['exists']
+                ? esc_html(sprintf(__('Baseline created %1$s with %2$d files.', 'wp-activity-logger-pro'), $integrity['created_at'], $integrity['count']))
+                : esc_html__('No baseline exists yet.', 'wp-activity-logger-pro');
+            ?>
+        </div>
+        <div id="wpal-integrity-results" class="wpal-list" style="margin-top:16px;"></div>
     </section>
 </div>
 
@@ -139,7 +162,14 @@ jQuery(function($) {
         const feedback = $('#wpal-threat-settings-feedback');
         feedback.text('Saving...');
 
-        const options = {};
+        const options = {
+            enable_threat_detection: 0,
+            enable_threat_notifications: 0,
+            monitor_failed_logins: 0,
+            monitor_unusual_logins: 0,
+            monitor_file_changes: 0,
+            monitor_privilege_escalation: 0
+        };
         new window.FormData(document.getElementById('wpal-threat-settings-form')).forEach(function(value, key) {
             const match = key.match(/^wpal_options\[([^\]]+)\]$/);
             if (match) {
@@ -187,12 +217,15 @@ jQuery(function($) {
                 const badgeClass = threat.severity === 'high' ? 'danger' : (threat.severity === 'medium' ? 'warning' : 'info');
                 const badge = '<span class="wpal-badge wpal-badge-' + badgeClass + '">' + threat.severity.charAt(0).toUpperCase() + threat.severity.slice(1) + '</span>';
                 const label = threat.type.replace(/_/g, ' ');
+                const userAction = threat.user_id ? '<button type="button" class="wpal-btn wpal-btn-secondary wpal-force-logout" data-user-id="' + threat.user_id + '"><?php echo esc_js(__('Force Logout', 'wp-activity-logger-pro')); ?></button>' : '';
+                const ipAction = threat.ip ? '<button type="button" class="wpal-btn wpal-btn-secondary wpal-block-ip" data-ip="' + threat.ip + '"><?php echo esc_js(__('Block IP', 'wp-activity-logger-pro')); ?></button>' : '';
                 return '<tr>' +
                     '<td>' + badge + '</td>' +
                     '<td>' + label + '</td>' +
                     '<td>' + threat.description + '</td>' +
                     '<td>' + (threat.ip || '—') + '</td>' +
                     '<td>' + (threat.last_attempt || threat.login_time || threat.time || '—') + '</td>' +
+                    '<td class="wpal-table-actions">' + ipAction + userAction + '</td>' +
                 '</tr>';
             });
 
@@ -201,6 +234,40 @@ jQuery(function($) {
         }).always(function() {
             $('#wpal-threat-loading').hide();
             button.prop('disabled', false).text('<?php echo esc_js(__('Analyze Threats', 'wp-activity-logger-pro')); ?>');
+        });
+    });
+
+    function renderIntegrity(response) {
+        const list = $('#wpal-integrity-results').empty();
+        if (!response.data.changes.length) {
+            list.append('<div class="wpal-list-row"><div>' + response.data.message + '</div></div>');
+            return;
+        }
+
+        response.data.changes.forEach(function(change) {
+            list.append('<div class="wpal-list-row"><div><strong>' + change.type + '</strong><div class="wpal-list-subtext">' + change.path + '</div></div><div class="wpal-meta-pill">' + change.group + '</div></div>');
+        });
+    }
+
+    $('#wpal-build-baseline').on('click', function() {
+        $.post(ajaxurl, {
+            action: 'wpal_build_file_baseline',
+            nonce: '<?php echo esc_js(wp_create_nonce('wpal_nonce')); ?>'
+        }).done(function(response) {
+            if (response.success) {
+                $('#wpal-integrity-status').text('Baseline created with ' + response.data.count + ' files.');
+            }
+        });
+    });
+
+    $('#wpal-scan-integrity').on('click', function() {
+        $.post(ajaxurl, {
+            action: 'wpal_scan_file_integrity',
+            nonce: '<?php echo esc_js(wp_create_nonce('wpal_nonce')); ?>'
+        }).done(function(response) {
+            if (response.success) {
+                renderIntegrity(response);
+            }
         });
     });
 });

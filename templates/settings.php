@@ -38,6 +38,10 @@ $roles = wp_roles();
                     <span><?php esc_html_e('Anonymize stored IP addresses', 'wp-activity-logger-pro'); ?></span>
                 </label>
                 <label>
+                    <span><?php esc_html_e('Redact context keys', 'wp-activity-logger-pro'); ?></span>
+                    <textarea class="wpal-input" rows="3" name="wpal_options[redact_context_keys]" placeholder="password,token,email"><?php echo esc_textarea($settings['redact_context_keys']); ?></textarea>
+                </label>
+                <label>
                     <span><?php esc_html_e('Timeline window (hours)', 'wp-activity-logger-pro'); ?></span>
                     <input class="wpal-input" type="number" min="1" name="wpal_options[timeline_window_hours]" value="<?php echo esc_attr($settings['timeline_window_hours']); ?>">
                 </label>
@@ -86,6 +90,14 @@ $roles = wp_roles();
                     <span><?php esc_html_e('Discord webhook URL', 'wp-activity-logger-pro'); ?></span>
                     <input class="wpal-input" type="url" name="wpal_options[discord_webhook_url]" value="<?php echo esc_attr($settings['discord_webhook_url']); ?>">
                 </label>
+                <label>
+                    <span><?php esc_html_e('Telegram bot token', 'wp-activity-logger-pro'); ?></span>
+                    <input class="wpal-input" type="text" name="wpal_options[telegram_bot_token]" value="<?php echo esc_attr($settings['telegram_bot_token']); ?>">
+                </label>
+                <label>
+                    <span><?php esc_html_e('Telegram chat ID', 'wp-activity-logger-pro'); ?></span>
+                    <input class="wpal-input" type="text" name="wpal_options[telegram_chat_id]" value="<?php echo esc_attr($settings['telegram_chat_id']); ?>">
+                </label>
             </div>
         </section>
 
@@ -123,6 +135,10 @@ $roles = wp_roles();
                     <input type="checkbox" name="wpal_options[enable_webhook_notifications]" value="1" <?php checked($settings['enable_webhook_notifications'], 1); ?>>
                     <span><?php esc_html_e('Enable generic webhook delivery', 'wp-activity-logger-pro'); ?></span>
                 </label>
+                <label>
+                    <span><?php esc_html_e('Severity override rules', 'wp-activity-logger-pro'); ?></span>
+                    <textarea class="wpal-input" rows="4" name="wpal_options[severity_rules]" placeholder="login_failed=error&#10;settings_updated=warning"><?php echo esc_textarea($settings['severity_rules']); ?></textarea>
+                </label>
             </div>
         </section>
 
@@ -157,6 +173,36 @@ $roles = wp_roles();
                     <span><?php esc_html_e('Summary email', 'wp-activity-logger-pro'); ?></span>
                     <input class="wpal-input" type="email" name="wpal_options[daily_summary_email]" value="<?php echo esc_attr($settings['daily_summary_email']); ?>">
                 </label>
+                <label class="wpal-check">
+                    <input type="checkbox" name="wpal_options[weekly_summary_enabled]" value="1" <?php checked($settings['weekly_summary_enabled'], 1); ?>>
+                    <span><?php esc_html_e('Send weekly summary report', 'wp-activity-logger-pro'); ?></span>
+                </label>
+                <label>
+                    <span><?php esc_html_e('Weekly summary email', 'wp-activity-logger-pro'); ?></span>
+                    <input class="wpal-input" type="email" name="wpal_options[weekly_summary_email]" value="<?php echo esc_attr($settings['weekly_summary_email']); ?>">
+                </label>
+                <div class="wpal-grid" style="grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px;">
+                    <label>
+                        <span><?php esc_html_e('Info retention days', 'wp-activity-logger-pro'); ?></span>
+                        <input class="wpal-input" type="number" min="0" name="wpal_options[retention_info_days]" value="<?php echo esc_attr($settings['retention_info_days']); ?>">
+                    </label>
+                    <label>
+                        <span><?php esc_html_e('Warning retention days', 'wp-activity-logger-pro'); ?></span>
+                        <input class="wpal-input" type="number" min="0" name="wpal_options[retention_warning_days]" value="<?php echo esc_attr($settings['retention_warning_days']); ?>">
+                    </label>
+                    <label>
+                        <span><?php esc_html_e('Error retention days', 'wp-activity-logger-pro'); ?></span>
+                        <input class="wpal-input" type="number" min="0" name="wpal_options[retention_error_days]" value="<?php echo esc_attr($settings['retention_error_days']); ?>">
+                    </label>
+                </div>
+                <label>
+                    <span><?php esc_html_e('Action retention rules', 'wp-activity-logger-pro'); ?></span>
+                    <textarea class="wpal-input" rows="4" name="wpal_options[retention_action_rules]" placeholder="login_failed=7&#10;plugin_activated=180"><?php echo esc_textarea($settings['retention_action_rules']); ?></textarea>
+                </label>
+                <label class="wpal-check">
+                    <input type="checkbox" name="wpal_options[plugin_changes_locked]" value="1" <?php checked($settings['plugin_changes_locked'], 1); ?>>
+                    <span><?php esc_html_e('Disable plugin change capability', 'wp-activity-logger-pro'); ?></span>
+                </label>
                 <label>
                     <span><?php esc_html_e('Default export format', 'wp-activity-logger-pro'); ?></span>
                     <select class="wpal-input" name="wpal_options[default_export_format]">
@@ -169,6 +215,17 @@ $roles = wp_roles();
         </section>
 
         <section class="wpal-panel wpal-panel-full">
+            <div class="wpal-panel-head">
+                <div>
+                    <h2><?php esc_html_e('Privacy Tools', 'wp-activity-logger-pro'); ?></h2>
+                    <p><?php esc_html_e('Export or delete a specific user’s log history when handling privacy requests.', 'wp-activity-logger-pro'); ?></p>
+                </div>
+            </div>
+            <div class="wpal-inline-actions" style="margin-bottom:16px;">
+                <input id="wpal-privacy-user-id" class="wpal-input" type="number" min="1" placeholder="<?php esc_attr_e('User ID', 'wp-activity-logger-pro'); ?>" style="max-width:140px;">
+                <button type="button" id="wpal-export-user-logs" class="wpal-btn wpal-btn-secondary"><?php esc_html_e('Export User Logs', 'wp-activity-logger-pro'); ?></button>
+                <button type="button" id="wpal-delete-user-logs-btn" class="wpal-btn wpal-btn-danger"><?php esc_html_e('Delete User Logs', 'wp-activity-logger-pro'); ?></button>
+            </div>
             <div class="wpal-inline-actions">
                 <button type="submit" class="wpal-btn wpal-btn-primary"><?php esc_html_e('Save Settings', 'wp-activity-logger-pro'); ?></button>
                 <button type="button" id="wpal-reset-settings" class="wpal-btn wpal-btn-danger"><?php esc_html_e('Reset to Defaults', 'wp-activity-logger-pro'); ?></button>

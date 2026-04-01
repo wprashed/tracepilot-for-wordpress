@@ -61,8 +61,11 @@ class WPAL_Settings {
             'monitor_unusual_logins',
             'monitor_file_changes',
             'monitor_privilege_escalation',
+            'monitor_file_integrity',
             'enable_geolocation',
             'anonymize_ip',
+            'plugin_changes_locked',
+            'weekly_summary_enabled',
         );
 
         foreach ($checkbox_fields as $field) {
@@ -71,17 +74,27 @@ class WPAL_Settings {
 
         $sanitized['log_retention'] = isset($options['log_retention']) ? absint($options['log_retention']) : $defaults['log_retention'];
         $sanitized['timeline_window_hours'] = isset($options['timeline_window_hours']) ? max(1, absint($options['timeline_window_hours'])) : $defaults['timeline_window_hours'];
+        $sanitized['retention_info_days'] = isset($options['retention_info_days']) ? absint($options['retention_info_days']) : $defaults['retention_info_days'];
+        $sanitized['retention_warning_days'] = isset($options['retention_warning_days']) ? absint($options['retention_warning_days']) : $defaults['retention_warning_days'];
+        $sanitized['retention_error_days'] = isset($options['retention_error_days']) ? absint($options['retention_error_days']) : $defaults['retention_error_days'];
         $sanitized['notification_email'] = isset($options['notification_email']) ? sanitize_email($options['notification_email']) : $defaults['notification_email'];
         $sanitized['daily_summary_email'] = isset($options['daily_summary_email']) ? sanitize_email($options['daily_summary_email']) : $defaults['daily_summary_email'];
+        $sanitized['weekly_summary_email'] = isset($options['weekly_summary_email']) ? sanitize_email($options['weekly_summary_email']) : $defaults['weekly_summary_email'];
         $sanitized['webhook_url'] = isset($options['webhook_url']) ? esc_url_raw($options['webhook_url']) : '';
         $sanitized['slack_webhook_url'] = isset($options['slack_webhook_url']) ? esc_url_raw($options['slack_webhook_url']) : '';
         $sanitized['discord_webhook_url'] = isset($options['discord_webhook_url']) ? esc_url_raw($options['discord_webhook_url']) : '';
+        $sanitized['telegram_bot_token'] = isset($options['telegram_bot_token']) ? sanitize_text_field($options['telegram_bot_token']) : '';
+        $sanitized['telegram_chat_id'] = isset($options['telegram_chat_id']) ? sanitize_text_field($options['telegram_chat_id']) : '';
         $sanitized['excluded_actions'] = isset($options['excluded_actions']) ? sanitize_textarea_field($options['excluded_actions']) : '';
+        $sanitized['severity_rules'] = isset($options['severity_rules']) ? sanitize_textarea_field($options['severity_rules']) : '';
+        $sanitized['redact_context_keys'] = isset($options['redact_context_keys']) ? sanitize_textarea_field($options['redact_context_keys']) : '';
+        $sanitized['retention_action_rules'] = isset($options['retention_action_rules']) ? sanitize_textarea_field($options['retention_action_rules']) : '';
 
         $sanitized['notification_events'] = isset($options['notification_events']) ? array_values(array_filter(array_map('sanitize_key', (array) $options['notification_events']))) : array();
         $sanitized['notification_severities'] = isset($options['notification_severities']) ? array_values(array_filter(array_map('sanitize_key', (array) $options['notification_severities']))) : array();
         $sanitized['suppressed_severities'] = isset($options['suppressed_severities']) ? array_values(array_filter(array_map('sanitize_key', (array) $options['suppressed_severities']))) : array();
         $sanitized['exclude_roles'] = isset($options['exclude_roles']) ? array_values(array_filter(array_map('sanitize_key', (array) $options['exclude_roles']))) : array();
+        $sanitized['blocked_ips'] = isset($options['blocked_ips']) ? array_values(array_filter(array_map('sanitize_text_field', (array) $options['blocked_ips']))) : $defaults['blocked_ips'];
 
         if (!empty($options['default_export_format']) && in_array($options['default_export_format'], array('csv', 'json', 'xml', 'pdf'), true)) {
             $sanitized['default_export_format'] = $options['default_export_format'];
@@ -122,7 +135,15 @@ class WPAL_Settings {
         }
 
         $raw = isset($_POST['wpal_options']) ? (array) $_POST['wpal_options'] : array();
-        $sanitized = $this->sanitize_options(wp_unslash($raw));
+        $raw = wp_unslash($raw);
+        $current = WPAL_Helpers::get_settings();
+        $replace_mode = !empty($_POST['replace_mode']);
+        $merged = $replace_mode ? $raw : array_merge($current, $raw);
+        $sanitized = $this->sanitize_options($merged);
+
+        if (empty($raw['blocked_ips'])) {
+            $sanitized['blocked_ips'] = isset($current['blocked_ips']) ? (array) $current['blocked_ips'] : array();
+        }
 
         update_option('wpal_options', $sanitized);
         update_option('wpal_settings', $sanitized);
