@@ -1,113 +1,218 @@
 <?php
 /**
- * Notifications class for WP Activity Logger Pro
+ * Notifications class for WP Activity Logger Pro.
  */
 
-// Exit if accessed directly
 if (!defined('ABSPATH')) {
     exit;
 }
 
 class WPAL_Notifications {
     /**
-     * Constructor
+     * Constructor.
      */
     public function __construct() {
-        // Add notification hooks
-        add_action('wpal_error_logged', array($this, 'notify_error'), 10, 3);
+        add_action('wpal_after_log_activity', array($this, 'maybe_send_notifications'), 20, 5);
+        add_action('wpal_daily_cron', array($this, 'send_daily_summary'));
     }
 
     /**
-     * Notify on error
+     * Send notifications for qualifying logs.
+     *
+     * @param int    $log_id Log ID.
+     * @param string $action Action.
+     * @param string $message Description.
+     * @param string $severity Severity.
+     * @param array  $context Context.
      */
-    public function notify_error($action, $message, $context) {
-        // Get settings
-        $settings = get_option('wpal_settings', array());
-        
-        // Check if notifications are enabled for errors
-        if (!isset($settings['notification_events']) || !in_array('error', $settings['notification_events'])) {
+    public function maybe_send_notifications($log_id, $action, $message, $severity, $context) {
+        $settings = WPAL_Helpers::get_settings();
+        if (empty($settings['enable_notifications'])) {
             return;
         }
-        
-        // Get notification email
-        $email = isset($settings['notification_email']) ? $settings['notification_email'] : get_option('admin_email');
-        
-        // Send notification
-        $this->send_email_notification($email, $action, $message, $context);
+
+        $matches_event = in_array($action, (array) $settings['notification_events'], true);
+        $matches_severity = in_array($severity, (array) $settings['notification_severities'], true);
+
+        if (!$matches_event && !$matches_severity) {
+            return;
+        }
+
+        $payload = $this->build_payload($log_id, $action, $message, $severity, $context);
+
+        if (!empty($settings['notification_email'])) {
+            $this->send_email_notification($settings['notification_email'], $payload);
+        }
+
+        if (!empty($settings['enable_webhook_notifications']) && !empty($settings['webhook_url'])) {
+            $this->send_webhook($settings['webhook_url'], $payload);
+        }
+
+        if (!empty($settings['slack_webhook_url'])) {
+            $this->send_slack_notification($settings['slack_webhook_url'], $payload);
+        }
+
+        if (!empty($settings['discord_webhook_url'])) {
+            $this->send_discord_notification($settings['discord_webhook_url'], $payload);
+        }
     }
 
     /**
-     * Send email notification
+     * Build notification payload.
+     *
+     * @param int    $log_id Log ID.
+     * @param string $action Action.
+     * @param string $message Description.
+     * @param string $severity Severity.
+     * @param array  $context Context.
+     * @return array
      */
-    private function send_email_notification($email, $action, $message, $context) {
-        // Get site info
-        $site_name = get_bloginfo('name');
-        $site_url = get_bloginfo('url');
-        
-        // Build email subject
-        $subject = sprintf(__('[%s] Activity Logger Error: %s', 'wp-activity-logger-pro'), $site_name, $action);
-        
-        // Build email body
-        $body = sprintf(__('An error has been logged on your WordPress site: %s', 'wp-activity-logger-pro'), $site_url) . "\n\n";
-        $body .= sprintf(__('Action: %s', 'wp-activity-logger-pro'), $action) . "\n";
-        $body .= sprintf(__('Message: %s', 'wp-activity-logger-pro'), $message) . "\n";
-        
-        // Add context if available
-        if (!empty($context)) {
-            $body .= __('Context:', 'wp-activity-logger-pro') . "\n";
-            foreach ($context as $key => $value) {
-                if (is_array($value) || is_object($value)) {
-                    $value = json_encode($value);
-                }
-                $body .= sprintf('%s: %s', $key, $value) . "\n";
-            }
-        }
-        
-        // Add link to logs
-        $body .= "\n" . sprintf(__('View all logs: %s', 'wp-activity-logger-pro'), admin_url('admin.php?page=wp-activity-logger-pro')) . "\n";
-        
-        // Set headers
-        $headers = array('Content-Type: text/plain; charset=UTF-8');
-        
-        // Send email
-        wp_mail($email, $subject, $body, $headers);
-    }
-
-    /**
-     * Send push notification
-     */
-    public function send_push_notification($action, $message, $context) {
-        // Get settings
-        $settings = get_option('wpal_settings', array());
-        
-        // Check if push notifications are enabled
-        if (!isset($settings['push_notifications']) || $settings['push_notifications'] !== 'on') {
-            return;
-        }
-        
-        // Get push notification URL
-        $push_url = isset($settings['push_url']) ? $settings['push_url'] : '';
-        
-        // If no URL, return
-        if (empty($push_url)) {
-            return;
-        }
-        
-        // Prepare data
-        $data = array(
+    private function build_payload($log_id, $action, $message, $severity, $context) {
+        return array(
+            'log_id' => (int) $log_id,
+            'site_name' => get_bloginfo('name'),
+            'site_url' => home_url('/'),
             'action' => $action,
             'message' => $message,
+            'severity' => $severity,
             'context' => $context,
-            'site' => get_bloginfo('name'),
-            'url' => get_bloginfo('url'),
-            'time' => current_time('mysql')
+            'time' => current_time('mysql'),
+            'admin_url' => admin_url('admin.php?page=wp-activity-logger-pro-logs'),
         );
-        
-        // Send push notification
-        wp_remote_post($push_url, array(
-            'body' => json_encode($data),
-            'headers' => array('Content-Type' => 'application/json'),
-            'timeout' => 5
-        ));
+    }
+
+    /**
+     * Send email notification.
+     *
+     * @param string $email Recipient.
+     * @param array  $payload Payload.
+     */
+    private function send_email_notification($email, $payload) {
+        $subject = sprintf(
+            __('[%1$s] %2$s alert: %3$s', 'wp-activity-logger-pro'),
+            $payload['site_name'],
+            strtoupper($payload['severity']),
+            $payload['action']
+        );
+
+        $body = sprintf(__('A new activity alert was recorded on %s.', 'wp-activity-logger-pro'), $payload['site_name']) . "\n\n";
+        $body .= sprintf(__('Action: %s', 'wp-activity-logger-pro'), $payload['action']) . "\n";
+        $body .= sprintf(__('Severity: %s', 'wp-activity-logger-pro'), ucfirst($payload['severity'])) . "\n";
+        $body .= sprintf(__('Message: %s', 'wp-activity-logger-pro'), $payload['message']) . "\n";
+        $body .= sprintf(__('Time: %s', 'wp-activity-logger-pro'), $payload['time']) . "\n";
+        $body .= sprintf(__('Dashboard: %s', 'wp-activity-logger-pro'), $payload['admin_url']) . "\n";
+
+        wp_mail($email, $subject, $body, array('Content-Type: text/plain; charset=UTF-8'));
+    }
+
+    /**
+     * Send generic webhook payload.
+     *
+     * @param string $url Webhook URL.
+     * @param array  $payload Payload.
+     */
+    private function send_webhook($url, $payload) {
+        wp_remote_post(
+            $url,
+            array(
+                'timeout' => 8,
+                'headers' => array('Content-Type' => 'application/json'),
+                'body' => wp_json_encode($payload),
+            )
+        );
+    }
+
+    /**
+     * Send Slack webhook.
+     *
+     * @param string $url Webhook URL.
+     * @param array  $payload Payload.
+     */
+    private function send_slack_notification($url, $payload) {
+        $body = array(
+            'text' => sprintf('[%s] %s: %s', strtoupper($payload['severity']), $payload['action'], $payload['message']),
+            'attachments' => array(
+                array(
+                    'color' => $payload['severity'] === 'error' ? '#d63638' : '#2271b1',
+                    'fields' => array(
+                        array('title' => 'Site', 'value' => $payload['site_name'], 'short' => true),
+                        array('title' => 'Time', 'value' => $payload['time'], 'short' => true),
+                    ),
+                ),
+            ),
+        );
+
+        $this->send_webhook($url, $body);
+    }
+
+    /**
+     * Send Discord webhook.
+     *
+     * @param string $url Webhook URL.
+     * @param array  $payload Payload.
+     */
+    private function send_discord_notification($url, $payload) {
+        $body = array(
+            'content' => sprintf('**%s** `%s` %s', strtoupper($payload['severity']), $payload['action'], $payload['message']),
+        );
+
+        $this->send_webhook($url, $body);
+    }
+
+    /**
+     * Send scheduled summary.
+     */
+    public function send_daily_summary() {
+        $settings = WPAL_Helpers::get_settings();
+        if (empty($settings['daily_summary_enabled']) || empty($settings['daily_summary_email'])) {
+            return;
+        }
+
+        global $wpdb;
+        WPAL_Helpers::init();
+        $table_name = WPAL_Helpers::$db_table;
+
+        $rows = $wpdb->get_results(
+            "SELECT severity, COUNT(*) AS total
+            FROM $table_name
+            WHERE time >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+            GROUP BY severity"
+        );
+
+        $actions = $wpdb->get_results(
+            "SELECT action, COUNT(*) AS total
+            FROM $table_name
+            WHERE time >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+            GROUP BY action
+            ORDER BY total DESC
+            LIMIT 5"
+        );
+
+        $body = sprintf(__('Daily activity summary for %s', 'wp-activity-logger-pro'), get_bloginfo('name')) . "\n\n";
+        foreach ($rows as $row) {
+            $body .= sprintf('%s: %d', ucfirst($row->severity), (int) $row->total) . "\n";
+        }
+
+        if (!empty($actions)) {
+            $body .= "\n" . __('Top actions:', 'wp-activity-logger-pro') . "\n";
+            foreach ($actions as $action) {
+                $body .= sprintf('- %s: %d', $action->action, (int) $action->total) . "\n";
+            }
+        }
+
+        if (!empty($settings['daily_summary_include_threats'])) {
+            $threat_table = $wpdb->prefix . 'wpal_threats';
+            if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $threat_table))) {
+                $count = (int) $wpdb->get_var("SELECT COUNT(*) FROM $threat_table WHERE time >= DATE_SUB(NOW(), INTERVAL 1 DAY)");
+                $body .= "\n" . sprintf(__('Threats detected in the last 24 hours: %d', 'wp-activity-logger-pro'), $count) . "\n";
+            }
+        }
+
+        wp_mail(
+            $settings['daily_summary_email'],
+            sprintf(__('[%s] Daily activity summary', 'wp-activity-logger-pro'), get_bloginfo('name')),
+            $body,
+            array('Content-Type: text/plain; charset=UTF-8')
+        );
     }
 }
