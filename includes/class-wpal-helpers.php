@@ -44,20 +44,33 @@ class WPAL_Helpers {
             'webhook_url' => '',
             'slack_webhook_url' => '',
             'discord_webhook_url' => '',
+            'telegram_bot_token' => '',
+            'telegram_chat_id' => '',
             'daily_summary_enabled' => 0,
             'daily_summary_email' => get_option('admin_email'),
             'daily_summary_include_threats' => 1,
+            'weekly_summary_enabled' => 0,
+            'weekly_summary_email' => get_option('admin_email'),
             'enable_threat_detection' => 1,
             'enable_threat_notifications' => 1,
             'monitor_failed_logins' => 1,
             'monitor_unusual_logins' => 1,
             'monitor_file_changes' => 1,
             'monitor_privilege_escalation' => 1,
+            'monitor_file_integrity' => 1,
             'enable_geolocation' => 1,
             'anonymize_ip' => 0,
             'exclude_roles' => array(),
             'excluded_actions' => '',
             'suppressed_severities' => array(),
+            'severity_rules' => '',
+            'redact_context_keys' => '',
+            'retention_info_days' => 30,
+            'retention_warning_days' => 60,
+            'retention_error_days' => 90,
+            'retention_action_rules' => '',
+            'blocked_ips' => array(),
+            'plugin_changes_locked' => 0,
             'timeline_window_hours' => 12,
             'default_export_format' => 'csv',
         );
@@ -144,6 +157,8 @@ class WPAL_Helpers {
             return false;
         }
 
+        $severity = self::apply_severity_rules($action, $severity, $settings);
+
         if (!isset($args['user_id'])) {
             $user = wp_get_current_user();
             $args['user_id'] = $user->ID;
@@ -163,6 +178,8 @@ class WPAL_Helpers {
             $args['ip'] = self::anonymize_ip($args['ip']);
         }
 
+        $context = isset($args['context']) ? self::redact_context($args['context'], $settings) : null;
+
         $data = array(
             'time' => current_time('mysql'),
             'site_id' => function_exists('get_current_blog_id') ? get_current_blog_id() : 1,
@@ -180,7 +197,7 @@ class WPAL_Helpers {
             'object_type' => isset($args['object_type']) ? sanitize_text_field($args['object_type']) : null,
             'object_id' => isset($args['object_id']) ? absint($args['object_id']) : null,
             'object_name' => isset($args['object_name']) ? sanitize_text_field($args['object_name']) : null,
-            'context' => isset($args['context']) ? wp_json_encode($args['context']) : null,
+            'context' => null !== $context ? wp_json_encode($context) : null,
         );
 
         $inserted = $wpdb->insert(self::$db_table, $data);
@@ -219,6 +236,61 @@ class WPAL_Helpers {
         }
 
         return true;
+    }
+
+    /**
+     * Apply action-based severity overrides.
+     *
+     * @param string $action Action.
+     * @param string $severity Severity.
+     * @param array  $settings Settings.
+     * @return string
+     */
+    public static function apply_severity_rules($action, $severity, $settings) {
+        if (empty($settings['severity_rules'])) {
+            return $severity;
+        }
+
+        $lines = preg_split('/\r\n|\r|\n/', (string) $settings['severity_rules']);
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ('' === $line || false === strpos($line, '=')) {
+                continue;
+            }
+
+            list($rule_action, $rule_severity) = array_map('trim', explode('=', $line, 2));
+            if ($rule_action === $action && in_array($rule_severity, array('info', 'warning', 'error', 'critical'), true)) {
+                return $rule_severity;
+            }
+        }
+
+        return $severity;
+    }
+
+    /**
+     * Redact configured keys from context payloads.
+     *
+     * @param mixed $context Context.
+     * @param array $settings Settings.
+     * @return mixed
+     */
+    public static function redact_context($context, $settings) {
+        if (empty($settings['redact_context_keys'])) {
+            return $context;
+        }
+
+        $keys = array_filter(array_map('trim', preg_split('/[\r\n,]+/', (string) $settings['redact_context_keys'])));
+        if (empty($keys) || !is_array($context)) {
+            return $context;
+        }
+
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $context)) {
+                $context[$key] = '[redacted]';
+            }
+        }
+
+        return $context;
     }
 
     /**
@@ -326,6 +398,33 @@ class WPAL_Helpers {
         self::init();
         $table_name = self::$db_table;
 
+        if (is_multisite() && is_network_admin()) {
+            $logs = self::get_logs(array(), 2000);
+            $today_start = strtotime(gmdate('Y-m-d 00:00:00', current_time('timestamp')));
+            $unique_users = array();
+            $warnings = 0;
+            $today_logs = 0;
+            foreach ($logs as $log) {
+                if (!empty($log->user_id)) {
+                    $unique_users[(int) $log->user_id] = true;
+                }
+                if (in_array($log->severity, array('warning', 'error', 'critical'), true)) {
+                    $warnings++;
+                }
+                if (strtotime($log->time) >= $today_start) {
+                    $today_logs++;
+                }
+            }
+
+            return array(
+                'total_logs' => count($logs),
+                'today_logs' => $today_logs,
+                'unique_users' => count($unique_users),
+                'warnings' => $warnings,
+                'open_threats' => 0,
+            );
+        }
+
         $today = gmdate('Y-m-d 00:00:00', current_time('timestamp'));
         $total_logs = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
         $today_logs = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $table_name WHERE time >= %s", $today));
@@ -357,6 +456,22 @@ class WPAL_Helpers {
         $table_name = self::$db_table;
         $days = max(1, absint($days));
 
+        if (is_multisite() && is_network_admin()) {
+            $logs = self::get_logs(array(), 5000);
+            $indexed = array();
+            for ($i = $days - 1; $i >= 0; $i--) {
+                $day = gmdate('Y-m-d', strtotime("-{$i} days", current_time('timestamp')));
+                $indexed[$day] = 0;
+            }
+            foreach ($logs as $log) {
+                $day = gmdate('Y-m-d', strtotime($log->time));
+                if (isset($indexed[$day])) {
+                    $indexed[$day]++;
+                }
+            }
+            return array('labels' => array_keys($indexed), 'values' => array_values($indexed));
+        }
+
         $rows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT DATE(time) AS day, COUNT(*) AS total
@@ -383,5 +498,159 @@ class WPAL_Helpers {
         }
 
         return array('labels' => $labels, 'values' => $values);
+    }
+
+    /**
+     * Get site label for a blog ID.
+     *
+     * @param int $site_id Site/blog ID.
+     * @return string
+     */
+    public static function get_site_label($site_id) {
+        if (!is_multisite()) {
+            return get_bloginfo('name');
+        }
+
+        $details = get_blog_details((int) $site_id);
+        return $details ? $details->blogname : sprintf(__('Site #%d', 'wp-activity-logger-pro'), (int) $site_id);
+    }
+
+    /**
+     * Aggregate logs across multisite installations when in network admin.
+     *
+     * @param array $filters Filters.
+     * @param int   $limit Limit.
+     * @return array
+     */
+    public static function get_logs($filters = array(), $limit = 500) {
+        global $wpdb;
+
+        self::init();
+        $limit = max(1, absint($limit));
+
+        if (!is_multisite() || !is_network_admin()) {
+            return self::query_local_logs(self::$db_table, $filters, $limit);
+        }
+
+        $all_logs = array();
+        $site_ids = !empty($filters['site_id']) ? array((int) $filters['site_id']) : wp_list_pluck(get_sites(array('number' => 1000)), 'blog_id');
+        foreach ($site_ids as $site_id) {
+            switch_to_blog((int) $site_id);
+            self::init();
+            $rows = self::query_local_logs(self::$db_table, $filters, $limit, false);
+            foreach ($rows as $row) {
+                $row->site_id = (int) $site_id;
+                $row->site_label = self::get_site_label($site_id);
+                $all_logs[] = $row;
+            }
+            restore_current_blog();
+        }
+        self::init();
+
+        usort(
+            $all_logs,
+            function($a, $b) {
+                return strcmp($b->time, $a->time);
+            }
+        );
+
+        return array_slice($all_logs, 0, $limit);
+    }
+
+    /**
+     * Query the local logs table.
+     *
+     * @param string $table_name Table name.
+     * @param array  $filters Filters.
+     * @param int    $limit Limit.
+     * @param bool   $prepare_limit Whether to include limit in SQL.
+     * @return array
+     */
+    public static function query_local_logs($table_name, $filters = array(), $limit = 500, $prepare_limit = true) {
+        global $wpdb;
+
+        $where = array('1=1');
+        $args = array();
+
+        $map = array(
+            'role_filter' => 'user_role = %s',
+            'severity_filter' => 'severity = %s',
+            'site_id' => 'site_id = %d',
+        );
+
+        foreach ($map as $filter_key => $sql) {
+            if (!empty($filters[$filter_key])) {
+                $where[] = $sql;
+                $args[] = ('site_id' === $filter_key) ? (int) $filters[$filter_key] : $filters[$filter_key];
+            }
+        }
+
+        if (!empty($filters['date_from'])) {
+            $where[] = 'time >= %s';
+            $args[] = $filters['date_from'] . ' 00:00:00';
+        }
+
+        if (!empty($filters['date_to'])) {
+            $where[] = 'time <= %s';
+            $args[] = $filters['date_to'] . ' 23:59:59';
+        }
+
+        if (!empty($filters['search'])) {
+            $like = '%' . $wpdb->esc_like($filters['search']) . '%';
+            $where[] = '(username LIKE %s OR action LIKE %s OR description LIKE %s)';
+            $args[] = $like;
+            $args[] = $like;
+            $args[] = $like;
+        }
+
+        $query = "SELECT * FROM $table_name WHERE " . implode(' AND ', $where) . ' ORDER BY time DESC';
+        if ($prepare_limit) {
+            $query .= $wpdb->prepare(' LIMIT %d', $limit);
+        } else {
+            $query .= ' LIMIT ' . (int) $limit;
+        }
+
+        if (!empty($args)) {
+            $query = $wpdb->prepare($query, $args);
+        }
+
+        return $wpdb->get_results($query);
+    }
+
+    /**
+     * Export logs for a specific user.
+     *
+     * @param int $user_id User ID.
+     * @return array
+     */
+    public static function export_user_logs($user_id) {
+        global $wpdb;
+        self::init();
+
+        return $wpdb->get_results(
+            $wpdb->prepare(
+                'SELECT * FROM ' . self::$db_table . ' WHERE user_id = %d ORDER BY time DESC',
+                (int) $user_id
+            ),
+            ARRAY_A
+        );
+    }
+
+    /**
+     * Delete logs for a specific user.
+     *
+     * @param int $user_id User ID.
+     * @return int|false
+     */
+    public static function delete_user_logs($user_id) {
+        global $wpdb;
+        self::init();
+
+        return $wpdb->query(
+            $wpdb->prepare(
+                'DELETE FROM ' . self::$db_table . ' WHERE user_id = %d',
+                (int) $user_id
+            )
+        );
     }
 }
