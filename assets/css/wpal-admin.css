@@ -142,6 +142,7 @@
 .wpal-grid {
   display: grid;
   gap: 18px;
+  align-items: start;
 }
 
 .wpal-stats-grid {
@@ -203,17 +204,54 @@
 
 .wpal-chart-shell {
   position: relative;
-  min-height: 320px;
+  min-height: 280px;
 }
 
 .wpal-chart-shell-sm {
-  min-height: 240px;
+  min-height: 210px;
 }
 
 .wpal-quick-links,
 .wpal-form-stack {
   display: grid;
   gap: 14px;
+}
+
+.wpal-check-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.wpal-check-card {
+  align-items: flex-start;
+  background: var(--wpal-soft);
+  border: 1px solid transparent;
+  border-radius: 14px;
+  display: flex;
+  gap: 10px;
+  min-height: 56px;
+  padding: 12px 14px;
+}
+
+.wpal-check-card:hover {
+  border-color: rgba(210, 93, 44, 0.28);
+}
+
+.wpal-check-card input {
+  margin-top: 4px;
+}
+
+.wpal-check-card strong {
+  display: block;
+  font-size: 14px;
+}
+
+.wpal-check-card small {
+  color: var(--wpal-muted);
+  display: block;
+  font-size: 12px;
+  margin-top: 3px;
 }
 
 .wpal-quick-link {
@@ -305,6 +343,19 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.wpal-filter-grid label,
+.wpal-form-stack label {
+  display: block;
+}
+
+.wpal-filter-grid > label > span,
+.wpal-form-stack > label > span {
+  color: var(--wpal-ink);
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .wpal-input {
   background: #fff;
   border: 1px solid var(--wpal-line);
@@ -318,6 +369,11 @@
 
 .wpal-input[multiple] {
   min-height: 120px;
+}
+
+textarea.wpal-input {
+  min-height: 110px;
+  resize: vertical;
 }
 
 .wpal-check {
@@ -440,6 +496,63 @@
   white-space: pre-wrap;
 }
 
+.wpal-kv-table th {
+  width: 34%;
+}
+
+.wpal-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.wpal-split {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+}
+
+.wpal-note {
+  background: var(--wpal-soft);
+  border-radius: 14px;
+  color: var(--wpal-muted);
+  font-size: 13px;
+  padding: 14px 16px;
+}
+
+.wpal-code-inline {
+  background: #f0ede4;
+  border-radius: 10px;
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  padding: 8px 10px;
+  word-break: break-all;
+}
+
+.wpal-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.wpal-pill {
+  background: var(--wpal-soft);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 12px;
+}
+
+.wpal-empty-panel {
+  padding: 36px 20px;
+  text-align: center;
+}
+
+.wpal-empty-panel p {
+  color: var(--wpal-muted);
+  margin: 8px 0 0;
+}
+
 .dataTables_wrapper .dataTables_filter input,
 .dataTables_wrapper .dataTables_length select {
   border: 1px solid var(--wpal-line);
@@ -450,7 +563,8 @@
 @media (max-width: 960px) {
   .wpal-grid-2,
   .wpal-detail-grid,
-  .wpal-filter-grid {
+  .wpal-filter-grid,
+  .wpal-split {
     grid-template-columns: 1fr;
   }
 
