@@ -14,6 +14,7 @@ class WPAL_Notifications {
     public function __construct() {
         add_action('wpal_after_log_activity', array($this, 'maybe_send_notifications'), 20, 5);
         add_action('wpal_daily_cron', array($this, 'send_daily_summary'));
+        add_action('wpal_weekly_cron', array($this, 'send_weekly_summary'));
     }
 
     /**
@@ -39,7 +40,34 @@ class WPAL_Notifications {
         }
 
         $payload = $this->build_payload($log_id, $action, $message, $severity, $context);
+        $this->dispatch_payload($payload, $settings);
+    }
 
+    /**
+     * Send a custom alert through configured channels.
+     *
+     * @param string $action Action.
+     * @param string $message Message.
+     * @param string $severity Severity.
+     * @param array  $context Context.
+     */
+    public function send_custom_notification($action, $message, $severity = 'warning', $context = array()) {
+        $settings = WPAL_Helpers::get_settings();
+        if (empty($settings['enable_notifications']) && empty($settings['enable_threat_notifications'])) {
+            return;
+        }
+
+        $payload = $this->build_payload(0, $action, $message, $severity, $context);
+        $this->dispatch_payload($payload, $settings);
+    }
+
+    /**
+     * Dispatch a payload.
+     *
+     * @param array $payload Payload.
+     * @param array $settings Settings.
+     */
+    private function dispatch_payload($payload, $settings) {
         if (!empty($settings['notification_email'])) {
             $this->send_email_notification($settings['notification_email'], $payload);
         }
@@ -54,6 +82,10 @@ class WPAL_Notifications {
 
         if (!empty($settings['discord_webhook_url'])) {
             $this->send_discord_notification($settings['discord_webhook_url'], $payload);
+        }
+
+        if (!empty($settings['telegram_bot_token']) && !empty($settings['telegram_chat_id'])) {
+            $this->send_telegram_notification($settings['telegram_bot_token'], $settings['telegram_chat_id'], $payload);
         }
     }
 
@@ -160,6 +192,36 @@ class WPAL_Notifications {
     }
 
     /**
+     * Send Telegram notification.
+     *
+     * @param string $token Bot token.
+     * @param string $chat_id Chat ID.
+     * @param array  $payload Payload.
+     */
+    private function send_telegram_notification($token, $chat_id, $payload) {
+        $url = sprintf('https://api.telegram.org/bot%s/sendMessage', rawurlencode($token));
+        $body = array(
+            'chat_id' => $chat_id,
+            'text' => sprintf(
+                "[%s] %s\n%s\n%s\n%s",
+                strtoupper($payload['severity']),
+                $payload['action'],
+                $payload['message'],
+                $payload['time'],
+                $payload['admin_url']
+            ),
+        );
+
+        wp_remote_post(
+            $url,
+            array(
+                'timeout' => 8,
+                'body' => $body,
+            )
+        );
+    }
+
+    /**
      * Send scheduled summary.
      */
     public function send_daily_summary() {
@@ -211,6 +273,40 @@ class WPAL_Notifications {
         wp_mail(
             $settings['daily_summary_email'],
             sprintf(__('[%s] Daily activity summary', 'wp-activity-logger-pro'), get_bloginfo('name')),
+            $body,
+            array('Content-Type: text/plain; charset=UTF-8')
+        );
+    }
+
+    /**
+     * Send weekly summary.
+     */
+    public function send_weekly_summary() {
+        $settings = WPAL_Helpers::get_settings();
+        if (empty($settings['weekly_summary_enabled']) || empty($settings['weekly_summary_email'])) {
+            return;
+        }
+
+        global $wpdb;
+        WPAL_Helpers::init();
+        $table_name = WPAL_Helpers::$db_table;
+
+        $sections = array(
+            'failed_logins' => "SELECT COUNT(*) FROM $table_name WHERE action = 'login_failed' AND time >= DATE_SUB(NOW(), INTERVAL 7 DAY)",
+            'role_changes' => "SELECT COUNT(*) FROM $table_name WHERE action = 'user_role_changed' AND time >= DATE_SUB(NOW(), INTERVAL 7 DAY)",
+            'plugin_changes' => "SELECT COUNT(*) FROM $table_name WHERE action IN ('plugin_activated','plugin_deactivated') AND time >= DATE_SUB(NOW(), INTERVAL 7 DAY)",
+            'theme_changes' => "SELECT COUNT(*) FROM $table_name WHERE action = 'theme_switched' AND time >= DATE_SUB(NOW(), INTERVAL 7 DAY)",
+            'high_severity' => "SELECT COUNT(*) FROM $table_name WHERE severity IN ('error','critical') AND time >= DATE_SUB(NOW(), INTERVAL 7 DAY)",
+        );
+
+        $body = sprintf(__('Weekly activity summary for %s', 'wp-activity-logger-pro'), get_bloginfo('name')) . "\n\n";
+        foreach ($sections as $label => $sql) {
+            $body .= sprintf("%s: %d\n", ucwords(str_replace('_', ' ', $label)), (int) $wpdb->get_var($sql));
+        }
+
+        wp_mail(
+            $settings['weekly_summary_email'],
+            sprintf(__('[%s] Weekly activity summary', 'wp-activity-logger-pro'), get_bloginfo('name')),
             $body,
             array('Content-Type: text/plain; charset=UTF-8')
         );
