@@ -250,8 +250,20 @@ class WPAL_Helpers {
             return false;
         }
 
-        if (!empty($settings['suppressed_severities']) && in_array($severity, (array) $settings['suppressed_severities'], true)) {
-            return false;
+        if (!empty($settings['suppressed_severities'])) {
+            $suppressed = array_values(array_unique(array_map('sanitize_key', (array) $settings['suppressed_severities'])));
+            $all_levels = array('info', 'warning', 'error', 'critical');
+            $normal_levels = array('info', 'warning', 'error');
+
+            // Failsafe: never let the settings accidentally suppress every severity,
+            // otherwise the logger appears "broken" and no new activity is stored.
+            if (
+                count(array_intersect($all_levels, $suppressed)) < count($all_levels) &&
+                count(array_intersect($normal_levels, $suppressed)) < count($normal_levels) &&
+                in_array($severity, $suppressed, true)
+            ) {
+                return false;
+            }
         }
 
         $role = isset($args['user_role']) ? $args['user_role'] : '';
