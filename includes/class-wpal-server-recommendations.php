@@ -16,7 +16,6 @@ class WPAL_Server_Recommendations {
      * Constructor
      */
     public function __construct() {
-        add_action('admin_menu', array($this, 'add_submenu_page'), 30);
         add_action('wp_ajax_wpal_analyze_server_needs', array($this, 'ajax_analyze_server_needs'));
     }
 
@@ -25,7 +24,7 @@ class WPAL_Server_Recommendations {
      */
     public function add_submenu_page() {
         add_submenu_page(
-            'wp-activity-logger-pro-dashboard',
+            'wp-activity-logger-pro',
             __('Server Recommendations', 'wp-activity-logger-pro'),
             __('Server Recommendations', 'wp-activity-logger-pro'),
             'manage_options',
