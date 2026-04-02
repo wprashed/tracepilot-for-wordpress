@@ -3,7 +3,7 @@
  * Plugin Name: WP Activity Logger Pro
  * Plugin URI: https://example.com/wp-activity-logger-pro
  * Description: Advanced activity logging for WordPress with real-time notifications, analytics, threat detection, and modern reporting tools.
- * Version: 1.2.1
+ * Version: 1.2.5
  * Author: Your Name
  * Author URI: https://example.com
  * Text Domain: wp-activity-logger-pro
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('WPAL_VERSION', '1.2.1');
+define('WPAL_VERSION', '1.2.5');
 define('WPAL_PLUGIN_FILE', __FILE__);
 define('WPAL_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WPAL_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -110,6 +110,7 @@ class WP_Activity_Logger_Pro {
         add_action('plugins_loaded', array($this, 'load_textdomain'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
         add_action('admin_init', array($this, 'maybe_upgrade_schema'));
+        add_filter('admin_body_class', array($this, 'add_admin_body_class'));
         add_filter('cron_schedules', array($this, 'register_cron_schedules'));
         add_action('wp', array($this, 'schedule_cron_jobs'));
         add_action('wpal_daily_cron', array($this, 'run_daily_tasks'));
@@ -210,6 +211,21 @@ class WP_Activity_Logger_Pro {
                 'export_url' => admin_url('admin-ajax.php'),
             )
         );
+    }
+
+    /**
+     * Add body class on plugin screens.
+     *
+     * @param string $classes Existing classes.
+     * @return string
+     */
+    public function add_admin_body_class($classes) {
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        if (!$screen || false === strpos((string) $screen->id, 'wp-activity-logger-pro')) {
+            return $classes;
+        }
+
+        return trim($classes . ' wpal-admin-screen');
     }
 
     /**
