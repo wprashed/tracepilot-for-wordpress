@@ -39,7 +39,7 @@ class WPAL_Diagnostics {
      */
     public function ajax_run_diagnostics() {
         check_ajax_referer('wpal_nonce', 'nonce');
-        if (!current_user_can('manage_options')) {
+        if (!WPAL_Helpers::current_user_can_manage()) {
             wp_send_json_error(array('message' => __('You do not have permission to perform this action.', 'wp-activity-logger-pro')));
         }
 
@@ -52,7 +52,7 @@ class WPAL_Diagnostics {
      */
     public function ajax_enable_safe_mode() {
         check_ajax_referer('wpal_nonce', 'nonce');
-        if (!current_user_can('manage_options')) {
+        if (!WPAL_Helpers::current_user_can_manage()) {
             wp_send_json_error(array('message' => __('You do not have permission to perform this action.', 'wp-activity-logger-pro')));
         }
 
@@ -83,7 +83,7 @@ class WPAL_Diagnostics {
      */
     public function ajax_disable_safe_mode() {
         check_ajax_referer('wpal_nonce', 'nonce');
-        if (!current_user_can('manage_options')) {
+        if (!WPAL_Helpers::current_user_can_manage()) {
             wp_send_json_error(array('message' => __('You do not have permission to perform this action.', 'wp-activity-logger-pro')));
         }
 
@@ -109,7 +109,7 @@ class WPAL_Diagnostics {
      */
     public function ajax_ask_diagnostics_ai() {
         check_ajax_referer('wpal_nonce', 'nonce');
-        if (!current_user_can('manage_options')) {
+        if (!WPAL_Helpers::current_user_can_manage()) {
             wp_send_json_error(array('message' => __('You do not have permission to perform this action.', 'wp-activity-logger-pro')));
         }
 
@@ -154,7 +154,7 @@ class WPAL_Diagnostics {
      * Inject client-side error collector.
      */
     public function inject_client_error_snippet() {
-        if (is_admin() && !current_user_can('manage_options')) {
+        if (is_admin() && !WPAL_Helpers::current_user_can_manage()) {
             return;
         }
         ?>
@@ -1355,7 +1355,7 @@ class WPAL_Diagnostics {
      * Render an admin notice for critical scan results.
      */
     public function render_admin_alert_notice() {
-        if (!current_user_can('manage_options')) {
+        if (!WPAL_Helpers::current_user_can_manage()) {
             return;
         }
 
