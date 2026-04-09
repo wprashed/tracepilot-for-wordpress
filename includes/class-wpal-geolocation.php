@@ -29,7 +29,7 @@ class WPAL_Geolocation {
         }
         
         // Check permissions
-        if (!current_user_can('manage_options')) {
+        if (!WPAL_Helpers::current_user_can_manage()) {
             wp_send_json_error(array('message' => __('You do not have permission to perform this action.', 'wp-activity-logger-pro')));
         }
         
