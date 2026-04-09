@@ -13,14 +13,21 @@ $table_name = WPAL_Helpers::$db_table;
 
 $role_filter = isset($_GET['role_filter']) ? sanitize_text_field(wp_unslash($_GET['role_filter'])) : '';
 $severity_filter = isset($_GET['severity_filter']) ? sanitize_text_field(wp_unslash($_GET['severity_filter'])) : '';
+$action_filter = isset($_GET['action_filter']) ? sanitize_text_field(wp_unslash($_GET['action_filter'])) : '';
 $date_from = isset($_GET['date_from']) ? sanitize_text_field(wp_unslash($_GET['date_from'])) : '';
 $date_to = isset($_GET['date_to']) ? sanitize_text_field(wp_unslash($_GET['date_to'])) : '';
 $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
 $site_filter = isset($_GET['site_id']) ? absint($_GET['site_id']) : 0;
+$severity_display = array(
+    'info' => __('Info', 'wp-activity-logger-pro'),
+    'warning' => __('Warning', 'wp-activity-logger-pro'),
+    'error' => __('Error', 'wp-activity-logger-pro'),
+);
 $logs = WPAL_Helpers::get_logs(
     array(
         'role_filter' => $role_filter,
         'severity_filter' => $severity_filter,
+        'action_filter' => $action_filter,
         'date_from' => $date_from,
         'date_to' => $date_to,
         'search' => $search,
@@ -29,6 +36,7 @@ $logs = WPAL_Helpers::get_logs(
     500
 );
 $roles = $wpdb->get_col("SELECT DISTINCT user_role FROM $table_name WHERE user_role <> '' ORDER BY user_role ASC");
+$actions = $wpdb->get_col("SELECT DISTINCT action FROM $table_name WHERE action <> '' ORDER BY action ASC");
 $sites = is_multisite() ? get_sites(array('number' => 200)) : array();
 
 $severity_rows = $wpdb->get_results("SELECT severity, COUNT(*) AS total FROM $table_name GROUP BY severity");
@@ -86,6 +94,15 @@ foreach ($severity_rows as $row) {
                         <option value="error" <?php selected($severity_filter, 'error'); ?>><?php esc_html_e('Error', 'wp-activity-logger-pro'); ?></option>
                     </select>
                 </label>
+                <label>
+                    <span><?php esc_html_e('Action', 'wp-activity-logger-pro'); ?></span>
+                    <select name="action_filter" class="wpal-input">
+                        <option value=""><?php esc_html_e('All actions', 'wp-activity-logger-pro'); ?></option>
+                        <?php foreach ($actions as $action) : ?>
+                            <option value="<?php echo esc_attr($action); ?>" <?php selected($action_filter, $action); ?>><?php echo esc_html($action); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
                 <?php if (is_multisite() && is_network_admin()) : ?>
                     <label>
                         <span><?php esc_html_e('Site', 'wp-activity-logger-pro'); ?></span>
@@ -99,11 +116,11 @@ foreach ($severity_rows as $row) {
                 <?php endif; ?>
                 <label>
                     <span><?php esc_html_e('From', 'wp-activity-logger-pro'); ?></span>
-                    <input type="text" name="date_from" value="<?php echo esc_attr($date_from); ?>" class="wpal-input wpal-datepicker" placeholder="YYYY-MM-DD">
+                    <input type="text" name="date_from" value="<?php echo esc_attr($date_from); ?>" class="wpal-input wpal-datepicker" placeholder="<?php esc_attr_e('YYYY-MM-DD', 'wp-activity-logger-pro'); ?>">
                 </label>
                 <label>
                     <span><?php esc_html_e('To', 'wp-activity-logger-pro'); ?></span>
-                    <input type="text" name="date_to" value="<?php echo esc_attr($date_to); ?>" class="wpal-input wpal-datepicker" placeholder="YYYY-MM-DD">
+                    <input type="text" name="date_to" value="<?php echo esc_attr($date_to); ?>" class="wpal-input wpal-datepicker" placeholder="<?php esc_attr_e('YYYY-MM-DD', 'wp-activity-logger-pro'); ?>">
                 </label>
                 <div class="wpal-filter-actions">
                     <button type="submit" class="wpal-btn wpal-btn-primary"><?php esc_html_e('Apply Filters', 'wp-activity-logger-pro'); ?></button>
@@ -132,6 +149,76 @@ foreach ($severity_rows as $row) {
                 <p><?php echo esc_html(sprintf(_n('%d log shown', '%d logs shown', count($logs), 'wp-activity-logger-pro'), count($logs))); ?></p>
             </div>
         </div>
+
+        <form method="get" class="wpal-log-filter-bar">
+            <input type="hidden" name="page" value="wp-activity-logger-pro-logs">
+            <label class="wpal-log-filter-search">
+                <span><?php esc_html_e('Search', 'wp-activity-logger-pro'); ?></span>
+                <input type="search" name="s" value="<?php echo esc_attr($search); ?>" class="wpal-input" placeholder="<?php esc_attr_e('Search usernames, actions, descriptions', 'wp-activity-logger-pro'); ?>">
+            </label>
+            <label>
+                <span><?php esc_html_e('Severity', 'wp-activity-logger-pro'); ?></span>
+                <select name="severity_filter" class="wpal-input">
+                    <option value=""><?php esc_html_e('All severities', 'wp-activity-logger-pro'); ?></option>
+                    <option value="info" <?php selected($severity_filter, 'info'); ?>><?php esc_html_e('Info', 'wp-activity-logger-pro'); ?></option>
+                    <option value="warning" <?php selected($severity_filter, 'warning'); ?>><?php esc_html_e('Warning', 'wp-activity-logger-pro'); ?></option>
+                    <option value="error" <?php selected($severity_filter, 'error'); ?>><?php esc_html_e('Error', 'wp-activity-logger-pro'); ?></option>
+                </select>
+            </label>
+            <label>
+                <span><?php esc_html_e('Action', 'wp-activity-logger-pro'); ?></span>
+                <select name="action_filter" class="wpal-input">
+                    <option value=""><?php esc_html_e('All actions', 'wp-activity-logger-pro'); ?></option>
+                    <?php foreach ($actions as $action) : ?>
+                        <option value="<?php echo esc_attr($action); ?>" <?php selected($action_filter, $action); ?>><?php echo esc_html($action); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label>
+                <span><?php esc_html_e('Role', 'wp-activity-logger-pro'); ?></span>
+                <select name="role_filter" class="wpal-input">
+                    <option value=""><?php esc_html_e('All roles', 'wp-activity-logger-pro'); ?></option>
+                    <?php foreach ($roles as $role) : ?>
+                        <option value="<?php echo esc_attr($role); ?>" <?php selected($role_filter, $role); ?>><?php echo esc_html($role); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label>
+                <span><?php esc_html_e('From', 'wp-activity-logger-pro'); ?></span>
+                <input type="text" name="date_from" value="<?php echo esc_attr($date_from); ?>" class="wpal-input wpal-datepicker" placeholder="<?php esc_attr_e('YYYY-MM-DD', 'wp-activity-logger-pro'); ?>">
+            </label>
+            <label>
+                <span><?php esc_html_e('To', 'wp-activity-logger-pro'); ?></span>
+                <input type="text" name="date_to" value="<?php echo esc_attr($date_to); ?>" class="wpal-input wpal-datepicker" placeholder="<?php esc_attr_e('YYYY-MM-DD', 'wp-activity-logger-pro'); ?>">
+            </label>
+            <?php if (is_multisite() && is_network_admin()) : ?>
+                <label>
+                    <span><?php esc_html_e('Site', 'wp-activity-logger-pro'); ?></span>
+                    <select name="site_id" class="wpal-input">
+                        <option value="0"><?php esc_html_e('All sites', 'wp-activity-logger-pro'); ?></option>
+                        <?php foreach ($sites as $site) : ?>
+                            <option value="<?php echo esc_attr($site->blog_id); ?>" <?php selected($site_filter, (int) $site->blog_id); ?>><?php echo esc_html($site->blogname ? $site->blogname : $site->domain); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+            <?php endif; ?>
+            <div class="wpal-filter-actions">
+                <button type="submit" class="wpal-btn wpal-btn-primary"><?php esc_html_e('Filter Logs', 'wp-activity-logger-pro'); ?></button>
+                <a class="wpal-btn wpal-btn-secondary" href="<?php echo esc_url(admin_url('admin.php?page=wp-activity-logger-pro-logs')); ?>"><?php esc_html_e('Clear', 'wp-activity-logger-pro'); ?></a>
+            </div>
+        </form>
+
+        <?php if ($search || $severity_filter || $action_filter || $role_filter || $date_from || $date_to || $site_filter) : ?>
+            <div class="wpal-toolbar-pills">
+                <?php if ($search) : ?><span class="wpal-meta-pill"><?php echo esc_html(sprintf(__('Search: %s', 'wp-activity-logger-pro'), $search)); ?></span><?php endif; ?>
+                <?php if ($severity_filter) : ?><span class="wpal-meta-pill"><?php echo esc_html(sprintf(__('Severity: %s', 'wp-activity-logger-pro'), isset($severity_display[ $severity_filter ]) ? $severity_display[ $severity_filter ] : $severity_filter)); ?></span><?php endif; ?>
+                <?php if ($action_filter) : ?><span class="wpal-meta-pill"><?php echo esc_html(sprintf(__('Action: %s', 'wp-activity-logger-pro'), $action_filter)); ?></span><?php endif; ?>
+                <?php if ($role_filter) : ?><span class="wpal-meta-pill"><?php echo esc_html(sprintf(__('Role: %s', 'wp-activity-logger-pro'), $role_filter)); ?></span><?php endif; ?>
+                <?php if ($date_from) : ?><span class="wpal-meta-pill"><?php echo esc_html(sprintf(__('From: %s', 'wp-activity-logger-pro'), $date_from)); ?></span><?php endif; ?>
+                <?php if ($date_to) : ?><span class="wpal-meta-pill"><?php echo esc_html(sprintf(__('To: %s', 'wp-activity-logger-pro'), $date_to)); ?></span><?php endif; ?>
+                <?php if ($site_filter && is_multisite() && is_network_admin()) : ?><span class="wpal-meta-pill"><?php echo esc_html(sprintf(__('Site ID: %d', 'wp-activity-logger-pro'), $site_filter)); ?></span><?php endif; ?>
+            </div>
+        <?php endif; ?>
 
         <?php if (empty($logs)) : ?>
             <p><?php esc_html_e('No logs match the current filters.', 'wp-activity-logger-pro'); ?></p>
