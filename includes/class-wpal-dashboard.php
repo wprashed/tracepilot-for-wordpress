@@ -24,11 +24,12 @@ class WPAL_Dashboard {
      */
     public function add_admin_menu() {
         $menu_icon = 'dashicons-visibility';
+        $capability = WPAL_Helpers::get_admin_capability();
 
         add_menu_page(
             __('Activity Logger', 'wp-activity-logger-pro'),
             __('Activity Logger', 'wp-activity-logger-pro'),
-            'manage_options',
+            $capability,
             'wp-activity-logger-pro',
             array($this, 'render_dashboard_page'),
             $menu_icon,
@@ -39,7 +40,7 @@ class WPAL_Dashboard {
             'wp-activity-logger-pro',
             __('Dashboard', 'wp-activity-logger-pro'),
             __('Dashboard', 'wp-activity-logger-pro'),
-            'manage_options',
+            $capability,
             'wp-activity-logger-pro',
             array($this, 'render_dashboard_page')
         );
@@ -48,7 +49,7 @@ class WPAL_Dashboard {
             'wp-activity-logger-pro',
             __('Activity Logs', 'wp-activity-logger-pro'),
             __('Activity Logs', 'wp-activity-logger-pro'),
-            'manage_options',
+            $capability,
             'wp-activity-logger-pro-logs',
             array($this, 'render_logs_page')
         );
@@ -57,7 +58,7 @@ class WPAL_Dashboard {
             'wp-activity-logger-pro',
             __('Analytics', 'wp-activity-logger-pro'),
             __('Analytics', 'wp-activity-logger-pro'),
-            'manage_options',
+            $capability,
             'wp-activity-logger-pro-analytics',
             array($this, 'render_analytics_page')
         );
@@ -66,7 +67,7 @@ class WPAL_Dashboard {
             'wp-activity-logger-pro',
             __('Threat Detection', 'wp-activity-logger-pro'),
             __('Threat Detection', 'wp-activity-logger-pro'),
-            'manage_options',
+            $capability,
             'wp-activity-logger-pro-threat-detection',
             array($this, 'render_threat_detection_page')
         );
@@ -75,7 +76,7 @@ class WPAL_Dashboard {
             'wp-activity-logger-pro',
             __('Server Recommendations', 'wp-activity-logger-pro'),
             __('Server Recommendations', 'wp-activity-logger-pro'),
-            'manage_options',
+            $capability,
             'wp-activity-logger-pro-server',
             array($this, 'render_server_recommendations_page')
         );
@@ -84,7 +85,7 @@ class WPAL_Dashboard {
             'wp-activity-logger-pro',
             __('Diagnostics', 'wp-activity-logger-pro'),
             __('Diagnostics', 'wp-activity-logger-pro'),
-            'manage_options',
+            $capability,
             'wp-activity-logger-pro-diagnostics',
             array($this, 'render_diagnostics_page')
         );
@@ -93,7 +94,7 @@ class WPAL_Dashboard {
             'wp-activity-logger-pro',
             __('Search Console', 'wp-activity-logger-pro'),
             __('Search Console', 'wp-activity-logger-pro'),
-            'manage_options',
+            $capability,
             'wp-activity-logger-pro-search-console',
             array($this, 'render_search_console_page')
         );
