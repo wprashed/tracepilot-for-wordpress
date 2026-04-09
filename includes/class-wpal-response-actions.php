@@ -26,7 +26,7 @@ class WPAL_Response_Actions {
      * Block requests from blocked IPs.
      */
     public function maybe_block_ip() {
-        if (is_admin() && current_user_can('manage_options')) {
+        if (is_admin() && WPAL_Helpers::current_user_can_manage()) {
             return;
         }
 
@@ -51,7 +51,35 @@ class WPAL_Response_Actions {
             return $caps;
         }
 
-        if (in_array($cap, array('activate_plugins', 'install_plugins', 'update_plugins', 'delete_plugins', 'edit_plugins'), true)) {
+        if ('activate_plugins' === $cap) {
+            if (!is_admin()) {
+                return array('do_not_allow');
+            }
+
+            $current_page = isset($GLOBALS['pagenow']) ? (string) $GLOBALS['pagenow'] : '';
+            $action = isset($_REQUEST['action']) ? sanitize_key(wp_unslash($_REQUEST['action'])) : '';
+            $action2 = isset($_REQUEST['action2']) ? sanitize_key(wp_unslash($_REQUEST['action2'])) : '';
+            $mutating_actions = array(
+                'activate',
+                'activate-selected',
+                'deactivate',
+                'deactivate-selected',
+                'enable',
+                'disable',
+                'resume',
+                'update',
+                'update-selected',
+                'delete-selected',
+            );
+
+            if ('plugins.php' === $current_page && !in_array($action, $mutating_actions, true) && !in_array($action2, $mutating_actions, true)) {
+                return $caps;
+            }
+
+            return array('do_not_allow');
+        }
+
+        if (in_array($cap, array('install_plugins', 'update_plugins', 'delete_plugins', 'edit_plugins'), true)) {
             return array('do_not_allow');
         }
 
@@ -73,7 +101,7 @@ class WPAL_Response_Actions {
      */
     public function ajax_block_ip() {
         check_ajax_referer('wpal_nonce', 'nonce');
-        if (!current_user_can('manage_options')) {
+        if (!WPAL_Helpers::current_user_can_manage()) {
             wp_send_json_error(array('message' => __('Permission denied.', 'wp-activity-logger-pro')));
         }
 
@@ -99,7 +127,7 @@ class WPAL_Response_Actions {
      */
     public function ajax_force_logout_user() {
         check_ajax_referer('wpal_nonce', 'nonce');
-        if (!current_user_can('manage_options')) {
+        if (!WPAL_Helpers::current_user_can_manage()) {
             wp_send_json_error(array('message' => __('Permission denied.', 'wp-activity-logger-pro')));
         }
 
@@ -121,7 +149,7 @@ class WPAL_Response_Actions {
      */
     public function ajax_reset_user_password() {
         check_ajax_referer('wpal_nonce', 'nonce');
-        if (!current_user_can('manage_options')) {
+        if (!WPAL_Helpers::current_user_can_manage()) {
             wp_send_json_error(array('message' => __('Permission denied.', 'wp-activity-logger-pro')));
         }
 
@@ -141,7 +169,7 @@ class WPAL_Response_Actions {
      */
     public function ajax_toggle_plugin_changes_lock() {
         check_ajax_referer('wpal_nonce', 'nonce');
-        if (!current_user_can('manage_options')) {
+        if (!WPAL_Helpers::current_user_can_manage()) {
             wp_send_json_error(array('message' => __('Permission denied.', 'wp-activity-logger-pro')));
         }
 
@@ -159,7 +187,7 @@ class WPAL_Response_Actions {
      */
     public function ajax_export_user_logs() {
         check_ajax_referer('wpal_nonce', 'nonce');
-        if (!current_user_can('manage_options')) {
+        if (!WPAL_Helpers::current_user_can_manage()) {
             wp_send_json_error(array('message' => __('Permission denied.', 'wp-activity-logger-pro')));
         }
 
@@ -177,7 +205,7 @@ class WPAL_Response_Actions {
      */
     public function ajax_delete_user_logs() {
         check_ajax_referer('wpal_nonce', 'nonce');
-        if (!current_user_can('manage_options')) {
+        if (!WPAL_Helpers::current_user_can_manage()) {
             wp_send_json_error(array('message' => __('Permission denied.', 'wp-activity-logger-pro')));
         }
 
