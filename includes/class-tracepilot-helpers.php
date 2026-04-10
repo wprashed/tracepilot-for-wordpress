@@ -370,9 +370,29 @@ class TracePilot_Helpers {
             }
         }
 
-        $role = isset($args['user_role']) ? $args['user_role'] : '';
-        if (!empty($settings['exclude_roles']) && !empty($role) && in_array($role, (array) $settings['exclude_roles'], true)) {
-            return false;
+        $excluded_roles = !empty($settings['exclude_roles']) ? array_values(array_unique(array_map('sanitize_key', (array) $settings['exclude_roles']))) : array();
+        if (!empty($excluded_roles) && function_exists('wp_roles')) {
+            $roles_obj = wp_roles();
+            $all_roles = ($roles_obj && is_array($roles_obj->roles)) ? array_keys($roles_obj->roles) : array();
+            if (!empty($all_roles)) {
+                $excluded_known = array_intersect($all_roles, $excluded_roles);
+                // Failsafe: if every role is excluded, don't block logging entirely.
+                if (count($excluded_known) >= count($all_roles)) {
+                    $excluded_roles = array();
+                }
+            }
+        }
+
+        if (!empty($excluded_roles)) {
+            $role = isset($args['user_role']) ? sanitize_key($args['user_role']) : '';
+            if ('' === $role) {
+                $user = wp_get_current_user();
+                $role = ($user && $user->ID && !empty($user->roles)) ? sanitize_key($user->roles[0]) : '';
+            }
+
+            if ('' !== $role && in_array($role, $excluded_roles, true)) {
+                return false;
+            }
         }
 
         return true;
