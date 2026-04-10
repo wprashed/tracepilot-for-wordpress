@@ -4,7 +4,7 @@ Tags: activity log, audit log, security, diagnostics, monitoring, logging
 Requires at least: 6.0
 Tested up to: 6.9.4
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.3.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -16,18 +16,24 @@ TracePilot for WordPress helps site owners, agencies, and administrators underst
 
 The plugin records user and system activity, highlights suspicious patterns, offers diagnostics for common site issues, and provides a clear export workflow for compliance or troubleshooting.
 
-= Core features =
+= Features =
 
-* Activity logging for logins, settings changes, content updates, plugin and theme actions, and other tracked events.
-* Modern dashboard with charts, summaries, and recent event visibility.
-* Searchable log stream with filters for severity, role, action, date range, and multisite context.
-* Log detail view with timeline context and response actions.
-* Threat detection tools for suspicious logins, file changes, and privilege-related events.
-* Diagnostics scanner with issue explanations, safe mode debugging, timeline, and change correlation.
-* Software vulnerability intelligence settings for Wordfence, Patchstack, and WPScan integrations.
-* File integrity baseline and scan tools.
-* Export tools for CSV, JSON, XML, and plain-text report output.
-* Privacy-oriented controls for IP anonymization, context redaction, and user log export/delete helpers.
+* 🧾 Activity audit log: Track key user and system actions such as logins, content edits, option changes, and software lifecycle events.
+* ✍️ Content change tracking: Record post/page updates, publishes, unpublishes, trash/restore operations, and deletions with context.
+* 🧩 Plugin and theme lifecycle: Log activation, deactivation, installs, deletes, and updates for faster change attribution.
+* 🔎 Search and filters: Quickly find events by text search, severity, role, action key, date range, and site context (multisite).
+* 📊 Admin dashboard: A modern dashboard view with summaries and quick access to recent activity.
+* 🧰 Diagnostics scanner: Run site checks (PHP, cron, REST health, DB/table signals, server limits) and see a health score and issues.
+* 🧪 Conflict detection signals: Identify potential hook collisions and generate a binary split-test plan.
+* 🛡️ Safe mode debugging: Temporarily disable selected plugins only for your admin session so visitors are unaffected.
+* 🔔 Real alert channels: Route alerts to Email, generic webhooks, Slack, Discord, and Telegram.
+* 🧩 Threat review workflow: Flag suspicious patterns (failed logins, unusual logins, file integrity signals) and review them in admin.
+* 🧬 File integrity: Build a baseline for core/plugin/theme files and scan for new, deleted, or modified files.
+* 🧠 Vulnerability intelligence: Configure Wordfence, Patchstack, and WPScan lookups for installed plugins/themes/core.
+* 📤 Exports: Download logs as CSV, JSON, XML, or a plain-text report for incident review.
+* 🧹 Retention and suppression: Reduce noise with excluded actions, suppressed severities, and per-action retention rules.
+* 🔐 Privacy and GDPR guardrails: IP anonymization, UI masking, context redaction keys, and per-user export/delete tools.
+* 🌐 Multisite support: When used in multisite/network admin, aggregate logs across sites and filter by site.
 
 = Built for administrators =
 
@@ -87,6 +93,14 @@ It includes configuration for software vulnerability intelligence sources and co
 
 == Changelog ==
 
+= 1.3.3 =
+* Fix: prevent “Exclude roles from logging” from accidentally excluding every role (which can make the logger appear broken).
+* Add: post/page delete tracking and additional plugin/theme lifecycle events (install/delete signals via upgrader).
+* Improve: log filtering reliability when user role context is missing.
+
+= 1.3.2 =
+* Improve: settings save flow reliability and admin asset loading.
+
 = 1.3.1 =
 * Rebranded plugin identity to TracePilot for WordPress in plugin metadata, docs, and admin menu labels.
 * Updated admin menu icon to a security-focused shield icon.
@@ -107,6 +121,9 @@ It includes configuration for software vulnerability intelligence sources and co
 * Converted diagnostics into sub-tabs.
 
 == Upgrade Notice ==
+
+= 1.3.3 =
+This release fixes a common configuration pitfall that could unintentionally disable logging and expands software lifecycle logging coverage.
 
 = 1.3.1 =
 This release introduces TracePilot branding updates and admin menu polish.
