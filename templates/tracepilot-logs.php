@@ -62,8 +62,8 @@ foreach ($severity_rows as $row) {
         </div>
     </section>
 
-    <section class="tracepilot-grid">
-
+    <section class="tracepilot-grid tracepilot-grid-2">
+        
         <article class="tracepilot-panel">
             <div class="tracepilot-panel-head">
                 <div>
