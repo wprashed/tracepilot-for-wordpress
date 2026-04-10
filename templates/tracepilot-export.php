@@ -43,7 +43,7 @@ $export_columns = array(
                     <p><?php esc_html_e('Choose the slice of activity you want to download.', 'wp-activity-logger-pro'); ?></p>
                 </div>
             </div>
-            <form method="post" action="<?php echo esc_url(admin_url('admin-ajax.php')); ?>" class="tracepilot-form-stack">
+            <form method="post" action="<?php echo esc_url(admin_url('admin-ajax.php')); ?>" class="tracepilot-form-stack tracepilot-export-form">
                 <input type="hidden" name="action" value="tracepilot_export_logs">
                 <input type="hidden" name="nonce" value="<?php echo esc_attr(wp_create_nonce('tracepilot_nonce')); ?>">
                 <label>
@@ -81,14 +81,16 @@ $export_columns = array(
                         <option value="error"><?php esc_html_e('Error', 'wp-activity-logger-pro'); ?></option>
                     </select>
                 </label>
-                <label>
-                    <span><?php esc_html_e('Date from', 'wp-activity-logger-pro'); ?></span>
-                    <input class="tracepilot-input tracepilot-datepicker" type="text" name="date_from" placeholder="<?php esc_attr_e('YYYY-MM-DD', 'wp-activity-logger-pro'); ?>">
-                </label>
-                <label>
-                    <span><?php esc_html_e('Date to', 'wp-activity-logger-pro'); ?></span>
-                    <input class="tracepilot-input tracepilot-datepicker" type="text" name="date_to" placeholder="<?php esc_attr_e('YYYY-MM-DD', 'wp-activity-logger-pro'); ?>">
-                </label>
+                <div class="tracepilot-date-grid">
+                    <label>
+                        <span><?php esc_html_e('Date from', 'wp-activity-logger-pro'); ?></span>
+                        <input class="tracepilot-input tracepilot-datepicker" type="text" name="date_from" placeholder="<?php esc_attr_e('YYYY-MM-DD', 'wp-activity-logger-pro'); ?>">
+                    </label>
+                    <label>
+                        <span><?php esc_html_e('Date to', 'wp-activity-logger-pro'); ?></span>
+                        <input class="tracepilot-input tracepilot-datepicker" type="text" name="date_to" placeholder="<?php esc_attr_e('YYYY-MM-DD', 'wp-activity-logger-pro'); ?>">
+                    </label>
+                </div>
                 <button type="submit" class="tracepilot-btn tracepilot-btn-primary"><?php esc_html_e('Download Export', 'wp-activity-logger-pro'); ?></button>
             </form>
         </article>
