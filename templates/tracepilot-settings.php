@@ -120,8 +120,8 @@ $gdpr_mode_enabled = !empty($settings['gdpr_mode']);
                     <span><?php esc_html_e('Timeline window (hours)', 'wp-activity-logger-pro'); ?></span>
                     <input class="tracepilot-input" type="number" min="1" name="wpal_options[timeline_window_hours]" value="<?php echo esc_attr($settings['timeline_window_hours']); ?>">
                 </label>
-                <label>
-                    <span><?php esc_html_e('Exclude roles from logging', 'wp-activity-logger-pro'); ?></span>
+                <div>
+                    <span class="tracepilot-section-label"><?php esc_html_e('Exclude roles from logging', 'wp-activity-logger-pro'); ?></span>
                     <div class="tracepilot-check-grid">
                         <?php foreach ($roles->roles as $role_key => $role) : ?>
                             <label class="tracepilot-check-card tracepilot-check-card-compact">
@@ -133,7 +133,7 @@ $gdpr_mode_enabled = !empty($settings['gdpr_mode']);
                             </label>
                         <?php endforeach; ?>
                     </div>
-                </label>
+                </div>
             </div>
                     </section>
 
@@ -148,8 +148,11 @@ $gdpr_mode_enabled = !empty($settings['gdpr_mode']);
                             <span class="tracepilot-pill"><?php echo !empty($settings['anonymize_ip']) ? esc_html__('Anonymized storage', 'wp-activity-logger-pro') : esc_html__('Full IP storage', 'wp-activity-logger-pro'); ?></span>
                             <span class="tracepilot-pill"><?php printf(esc_html__('%d redaction rule(s)', 'wp-activity-logger-pro'), $redacted_keys_count); ?></span>
                         </div>
-                        <div class="tracepilot-inline-actions">
-                            <input class="tracepilot-input tracepilot-input-inline tracepilot-privacy-user-id-input" type="number" min="1" placeholder="<?php esc_attr_e('User ID', 'wp-activity-logger-pro'); ?>">
+                        <div class="tracepilot-inline-actions tracepilot-inline-actions-tools">
+                            <label class="tracepilot-inline-field">
+                                <span><?php esc_html_e('User ID', 'wp-activity-logger-pro'); ?></span>
+                                <input class="tracepilot-input tracepilot-input-inline tracepilot-privacy-user-id-input" type="number" min="1" placeholder="<?php esc_attr_e('User ID', 'wp-activity-logger-pro'); ?>">
+                            </label>
                             <button type="button" class="tracepilot-btn tracepilot-btn-secondary tracepilot-export-user-logs-trigger"><?php esc_html_e('Export User Logs', 'wp-activity-logger-pro'); ?></button>
                             <button type="button" class="tracepilot-btn tracepilot-btn-danger tracepilot-delete-user-logs-trigger"><?php esc_html_e('Delete User Logs', 'wp-activity-logger-pro'); ?></button>
                         </div>
@@ -435,8 +438,11 @@ $gdpr_mode_enabled = !empty($settings['gdpr_mode']);
                                 <p><?php esc_html_e('Export or delete a specific user’s log history when handling privacy requests.', 'wp-activity-logger-pro'); ?></p>
                             </div>
                         </div>
-                        <div class="tracepilot-inline-actions">
-                            <input class="tracepilot-input tracepilot-input-inline tracepilot-privacy-user-id-input" type="number" min="1" placeholder="<?php esc_attr_e('User ID', 'wp-activity-logger-pro'); ?>">
+                        <div class="tracepilot-inline-actions tracepilot-inline-actions-tools">
+                            <label class="tracepilot-inline-field">
+                                <span><?php esc_html_e('User ID', 'wp-activity-logger-pro'); ?></span>
+                                <input class="tracepilot-input tracepilot-input-inline tracepilot-privacy-user-id-input" type="number" min="1" placeholder="<?php esc_attr_e('User ID', 'wp-activity-logger-pro'); ?>">
+                            </label>
                             <button type="button" class="tracepilot-btn tracepilot-btn-secondary tracepilot-export-user-logs-trigger"><?php esc_html_e('Export User Logs', 'wp-activity-logger-pro'); ?></button>
                             <button type="button" class="tracepilot-btn tracepilot-btn-danger tracepilot-delete-user-logs-trigger"><?php esc_html_e('Delete User Logs', 'wp-activity-logger-pro'); ?></button>
                         </div>
