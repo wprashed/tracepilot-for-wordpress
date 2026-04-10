@@ -375,17 +375,8 @@
     }
 
     $('#tracepilot-settings-form').on('submit', function(event) {
-        event.preventDefault();
         const feedback = $('#tracepilot-settings-feedback');
         feedback.text('Saving...');
-
-        request({
-            action: 'tracepilot_save_settings',
-            replace_mode: 1,
-            wpal_options: collectOptions(this)
-        }).done(function(response) {
-            feedback.text(response.success ? response.data.message : 'Unable to save settings.');
-        });
     });
 
     $('#tracepilot-reset-settings').on('click', function() {
