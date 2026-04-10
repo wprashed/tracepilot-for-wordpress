@@ -83,9 +83,9 @@ foreach ($severity_rows as $row) {
                     <p><?php esc_html_e('Narrow down the event stream quickly.', 'wp-activity-logger-pro'); ?></p>
                 </div>
             </div>
-            <form method="get" class="tracepilot-filter-grid">
+            <form method="get" class="tracepilot-filter-grid tracepilot-filter-grid-logs">
                 <input type="hidden" name="page" value="wp-activity-logger-pro-logs">
-                <label>
+                <label class="tracepilot-field-span-2">
                     <span><?php esc_html_e('Search', 'wp-activity-logger-pro'); ?></span>
                     <input type="search" name="s" value="<?php echo esc_attr($search); ?>" class="tracepilot-input" placeholder="<?php esc_attr_e('Username, action, description', 'wp-activity-logger-pro'); ?>">
                 </label>
@@ -127,14 +127,16 @@ foreach ($severity_rows as $row) {
                         </select>
                     </label>
                 <?php endif; ?>
-                <label>
-                    <span><?php esc_html_e('From', 'wp-activity-logger-pro'); ?></span>
-                    <input type="text" name="date_from" value="<?php echo esc_attr($date_from); ?>" class="tracepilot-input tracepilot-datepicker" placeholder="<?php esc_attr_e('YYYY-MM-DD', 'wp-activity-logger-pro'); ?>">
-                </label>
-                <label>
-                    <span><?php esc_html_e('To', 'wp-activity-logger-pro'); ?></span>
-                    <input type="text" name="date_to" value="<?php echo esc_attr($date_to); ?>" class="tracepilot-input tracepilot-datepicker" placeholder="<?php esc_attr_e('YYYY-MM-DD', 'wp-activity-logger-pro'); ?>">
-                </label>
+                <div class="tracepilot-date-grid tracepilot-field-span-2">
+                    <label>
+                        <span><?php esc_html_e('From', 'wp-activity-logger-pro'); ?></span>
+                        <input type="text" name="date_from" value="<?php echo esc_attr($date_from); ?>" class="tracepilot-input tracepilot-datepicker" placeholder="<?php esc_attr_e('YYYY-MM-DD', 'wp-activity-logger-pro'); ?>">
+                    </label>
+                    <label>
+                        <span><?php esc_html_e('To', 'wp-activity-logger-pro'); ?></span>
+                        <input type="text" name="date_to" value="<?php echo esc_attr($date_to); ?>" class="tracepilot-input tracepilot-datepicker" placeholder="<?php esc_attr_e('YYYY-MM-DD', 'wp-activity-logger-pro'); ?>">
+                    </label>
+                </div>
                 <div class="tracepilot-filter-actions">
                     <button type="submit" class="tracepilot-btn tracepilot-btn-primary"><?php esc_html_e('Apply Filters', 'wp-activity-logger-pro'); ?></button>
                     <a class="tracepilot-btn tracepilot-btn-secondary" href="<?php echo esc_url(admin_url('admin.php?page=wp-activity-logger-pro-logs')); ?>"><?php esc_html_e('Reset', 'wp-activity-logger-pro'); ?></a>
