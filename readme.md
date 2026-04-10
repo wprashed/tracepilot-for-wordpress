@@ -2,7 +2,7 @@
 
 TracePilot for WordPress is a modern WordPress activity log, diagnostics, and threat-review plugin built for administrators who need visibility, traceability, and safer debugging tools inside wp-admin.
 
-![TracePilot for WordPress overview](docs/visuals/tracepilot-overview.svg)
+![TracePilot overview](docs/visuals/tracepilot-overview.svg)
 
 ## Overview
 
@@ -32,6 +32,43 @@ The plugin combines several admin-focused workflows in one place:
 - 🧹 **Retention and suppression**: Exclude noisy actions, suppress severities, and apply per-action retention rules.
 - 🔐 **Privacy and GDPR guardrails**: IP anonymization/UI masking, context redaction keys, and per-user export/delete tools.
 - 🌐 **Multisite support**: Aggregate logs across sites in network admin and filter by site/blog ID.
+
+## Quick Start (choose your path)
+
+- 🧾 **I need an audit trail**: Go to `TracePilot -> Activity Logs`, filter by `Action`/`Severity`, then export to CSV.
+- 🧪 **A page is broken**: Go to `TracePilot -> Diagnostics`, run a scan, then use `Safe Mode` to isolate plugin conflicts privately.
+- 🛡️ **I suspect suspicious activity**: Enable alerts, review threat rules, and build a file integrity baseline.
+- 🔐 **I got a privacy request**: Use per-user export/delete tools and enable IP anonymization and context redaction keys.
+
+## What gets logged (examples)
+
+<details>
+  <summary>✍️ Content events</summary>
+
+  - Post/page publish, update, unpublish
+  - Trash, restore, delete
+</details>
+
+<details>
+  <summary>🔐 Authentication events</summary>
+
+  - Login, logout
+  - Failed login attempts
+</details>
+
+<details>
+  <summary>🧩 Plugin and theme events</summary>
+
+  - Activation and deactivation
+  - Updates
+  - Install/delete signals when WordPress reports them via the upgrader
+</details>
+
+<details>
+  <summary>⚙️ Configuration signals</summary>
+
+  - Settings/options changes that often explain “what changed?” regressions
+</details>
 
 ## Highlights
 
@@ -82,6 +119,35 @@ The plugin combines several admin-focused workflows in one place:
 2. Activate it from the WordPress `Plugins` screen.
 3. Open `TracePilot` from the admin menu.
 4. Configure privacy, notifications, diagnostics, and threat detection settings to match your site.
+
+## Common playbooks
+
+<details>
+  <summary>🧪 Conflict isolation in under 10 minutes</summary>
+
+  1. Open `TracePilot -> Diagnostics` and run a scan.
+  2. Review “hook collision” signals (if present) and the suggested plugin set.
+  3. Start `Safe Mode` for your admin session only.
+  4. Disable half the suspected plugins, retest the failing page, then switch halves.
+</details>
+
+<details>
+  <summary>🔔 Set up real alerts (Slack/Discord/Telegram)</summary>
+
+  1. Go to `TracePilot -> Settings -> Notifications`.
+  2. Enable notifications.
+  3. Add your Slack/Discord webhook or Telegram bot token + chat ID.
+  4. Choose which severities/events should alert.
+</details>
+
+<details>
+  <summary>🔐 Privacy-friendly logging (GDPR-style defaults)</summary>
+
+  1. Enable GDPR guardrails.
+  2. Turn on IP anonymization and UI masking.
+  3. Add context redaction keys (tokens/emails/etc).
+  4. Use per-user export/delete tools for privacy requests.
+</details>
 
 ## Documentation map
 
