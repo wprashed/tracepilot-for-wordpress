@@ -231,10 +231,9 @@ foreach ($severity_rows as $row) {
         <div class="tracepilot-modal-body"></div>
     </div>
 </div>
-
-<script>
-window.tracepilotLogsSeverity = {
-    labels: <?php echo wp_json_encode($severity_labels); ?>,
-    values: <?php echo wp_json_encode($severity_values); ?>
-};
-</script>
+<div
+    id="tracepilot-logs-severity-data"
+    data-labels="<?php echo esc_attr(wp_json_encode($severity_labels)); ?>"
+    data-values="<?php echo esc_attr(wp_json_encode($severity_values)); ?>"
+    hidden
+></div>
