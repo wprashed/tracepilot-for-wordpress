@@ -44,8 +44,8 @@ class TracePilot_Server_Recommendations {
      * Analyze server needs based on logs
      */
     public function ajax_analyze_server_needs() {
-        // Check nonce
-        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'tracepilot_nonce')) {
+        $nonce = isset($_POST['nonce']) ? sanitize_text_field(wp_unslash($_POST['nonce'])) : '';
+        if (!$nonce || !wp_verify_nonce($nonce, 'tracepilot_nonce')) {
             wp_send_json_error(array('message' => __('Invalid security token.', 'tracepilot')));
         }
         
@@ -253,7 +253,9 @@ class TracePilot_Server_Recommendations {
         $memory_limit = ini_get('memory_limit');
         
         // Get server software
-        $server_software = isset($_SERVER['SERVER_SOFTWARE']) ? $_SERVER['SERVER_SOFTWARE'] : 'Unknown';
+        $server_software = isset($_SERVER['SERVER_SOFTWARE'])
+            ? sanitize_text_field(wp_unslash($_SERVER['SERVER_SOFTWARE']))
+            : 'Unknown';
         
         // Get PHP version
         $php_version = phpversion();
