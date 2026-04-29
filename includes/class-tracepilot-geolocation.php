@@ -23,8 +23,8 @@ class TracePilot_Geolocation {
      * AJAX get IP geolocation
      */
     public function ajax_get_ip_geolocation() {
-        // Check nonce
-        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'tracepilot_nonce')) {
+        $nonce = isset($_POST['nonce']) ? sanitize_text_field(wp_unslash($_POST['nonce'])) : '';
+        if (!$nonce || !wp_verify_nonce($nonce, 'tracepilot_nonce')) {
             wp_send_json_error(array('message' => __('Invalid security token.', 'tracepilot')));
         }
         
@@ -34,7 +34,7 @@ class TracePilot_Geolocation {
         }
         
         // Get IP
-        $ip = isset($_POST['ip']) ? sanitize_text_field($_POST['ip']) : '';
+        $ip = isset($_POST['ip']) ? sanitize_text_field(wp_unslash($_POST['ip'])) : '';
         
         if (empty($ip)) {
             wp_send_json_error(array('message' => __('IP address is required.', 'tracepilot')));
@@ -54,6 +54,21 @@ class TracePilot_Geolocation {
      * Get IP geolocation
      */
     public function get_ip_geolocation($ip) {
+        $settings = TracePilot_Helpers::get_settings();
+        if (empty($settings['enable_geolocation'])) {
+            return array(
+                'country' => __('Unavailable', 'tracepilot'),
+                'country_code' => 'NA',
+                'city' => __('Unavailable', 'tracepilot'),
+                'region' => __('Unavailable', 'tracepilot'),
+                'continent' => __('Unavailable', 'tracepilot'),
+                'latitude' => 0,
+                'longitude' => 0,
+                'isp' => __('Unavailable', 'tracepilot'),
+                'timezone' => __('Unavailable', 'tracepilot')
+            );
+        }
+
         // Check if IP is valid
         if (empty($ip) || $ip === '127.0.0.1' || $ip === '::1') {
             return array(
@@ -78,7 +93,12 @@ class TracePilot_Geolocation {
         }
         
         // Call geolocation API
-        $response = wp_remote_get('http://ip-api.com/json/' . $ip . '?fields=status,message,country,countryCode,region,regionName,city,district,zip,lat,lon,timezone,isp,org,as,continent,continentCode');
+        $response = wp_remote_get(
+            'https://ip-api.com/json/' . rawurlencode($ip) . '?fields=status,message,country,countryCode,region,regionName,city,district,zip,lat,lon,timezone,isp,org,as,continent,continentCode',
+            array(
+                'timeout' => 10,
+            )
+        );
         
         if (is_wp_error($response)) {
             return $response;
@@ -92,15 +112,15 @@ class TracePilot_Geolocation {
         
         // Format data
         $geo_data = array(
-            'country' => isset($data['country']) ? $data['country'] : __('Unknown', 'tracepilot'),
-            'country_code' => isset($data['countryCode']) ? $data['countryCode'] : 'XX',
-            'city' => isset($data['city']) ? $data['city'] : __('Unknown', 'tracepilot'),
-            'region' => isset($data['regionName']) ? $data['regionName'] : __('Unknown', 'tracepilot'),
-            'continent' => isset($data['continent']) ? $data['continent'] : __('Unknown', 'tracepilot'),
-            'latitude' => isset($data['lat']) ? $data['lat'] : 0,
-            'longitude' => isset($data['lon']) ? $data['lon'] : 0,
-            'isp' => isset($data['isp']) ? $data['isp'] : __('Unknown', 'tracepilot'),
-            'timezone' => isset($data['timezone']) ? $data['timezone'] : __('Unknown', 'tracepilot')
+            'country' => isset($data['country']) ? sanitize_text_field($data['country']) : __('Unknown', 'tracepilot'),
+            'country_code' => isset($data['countryCode']) ? sanitize_text_field($data['countryCode']) : 'XX',
+            'city' => isset($data['city']) ? sanitize_text_field($data['city']) : __('Unknown', 'tracepilot'),
+            'region' => isset($data['regionName']) ? sanitize_text_field($data['regionName']) : __('Unknown', 'tracepilot'),
+            'continent' => isset($data['continent']) ? sanitize_text_field($data['continent']) : __('Unknown', 'tracepilot'),
+            'latitude' => isset($data['lat']) ? floatval($data['lat']) : 0,
+            'longitude' => isset($data['lon']) ? floatval($data['lon']) : 0,
+            'isp' => isset($data['isp']) ? sanitize_text_field($data['isp']) : __('Unknown', 'tracepilot'),
+            'timezone' => isset($data['timezone']) ? sanitize_text_field($data['timezone']) : __('Unknown', 'tracepilot')
         );
         
         // Cache result for 1 week
