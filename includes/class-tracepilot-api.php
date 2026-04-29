@@ -39,12 +39,14 @@ class TracePilot_API {
         $this->guard_request();
         $series = TracePilot_Helpers::get_activity_series(14);
         ?>
-        <canvas id="tracepilot-widget-activity-chart" height="220"></canvas>
-        <script>
-        if (window.tracepilotRenderLineChart) {
-            window.tracepilotRenderLineChart('tracepilot-widget-activity-chart', <?php echo wp_json_encode($series['labels']); ?>, <?php echo wp_json_encode($series['values']); ?>);
-        }
-        </script>
+        <canvas
+            id="tracepilot-widget-activity-chart"
+            class="tracepilot-dynamic-chart"
+            data-chart-type="line"
+            data-chart-labels="<?php echo esc_attr(wp_json_encode($series['labels'])); ?>"
+            data-chart-values="<?php echo esc_attr(wp_json_encode($series['values'])); ?>"
+            height="220"
+        ></canvas>
         <?php
         wp_die();
     }
@@ -104,12 +106,14 @@ class TracePilot_API {
             $values[] = (int) $row->total;
         }
         ?>
-        <canvas id="tracepilot-widget-severity-chart" height="220"></canvas>
-        <script>
-        if (window.tracepilotRenderDoughnutChart) {
-            window.tracepilotRenderDoughnutChart('tracepilot-widget-severity-chart', <?php echo wp_json_encode($labels); ?>, <?php echo wp_json_encode($values); ?>);
-        }
-        </script>
+        <canvas
+            id="tracepilot-widget-severity-chart"
+            class="tracepilot-dynamic-chart"
+            data-chart-type="doughnut"
+            data-chart-labels="<?php echo esc_attr(wp_json_encode($labels)); ?>"
+            data-chart-values="<?php echo esc_attr(wp_json_encode($values)); ?>"
+            height="220"
+        ></canvas>
         <?php
         wp_die();
     }
@@ -149,12 +153,13 @@ class TracePilot_API {
      */
     public function get_log_details() {
         $this->guard_request();
-        if (is_multisite() && !empty($_POST['site_id'])) {
-            switch_to_blog(absint($_POST['site_id']));
+        $site_id = isset($_POST['site_id']) ? absint(wp_unslash($_POST['site_id'])) : 0;
+        if (is_multisite() && $site_id) {
+            switch_to_blog($site_id);
             TracePilot_Helpers::init();
         }
         include TracePilot_PLUGIN_DIR . 'templates/tracepilot-log-details.php';
-        if (is_multisite() && !empty($_POST['site_id'])) {
+        if (is_multisite() && $site_id) {
             restore_current_blog();
             TracePilot_Helpers::init();
         }
@@ -171,8 +176,8 @@ class TracePilot_API {
             wp_send_json_error(array('message' => __('You do not have permission to delete logs.', 'tracepilot')));
         }
 
-        $log_id = isset($_POST['log_id']) ? absint($_POST['log_id']) : 0;
-        $site_id = isset($_POST['site_id']) ? absint($_POST['site_id']) : 0;
+        $log_id = isset($_POST['log_id']) ? absint(wp_unslash($_POST['log_id'])) : 0;
+        $site_id = isset($_POST['site_id']) ? absint(wp_unslash($_POST['site_id'])) : 0;
         if (!$log_id) {
             wp_send_json_error(array('message' => __('Invalid log ID.', 'tracepilot')));
         }
