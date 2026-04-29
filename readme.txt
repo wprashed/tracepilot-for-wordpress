@@ -2,9 +2,9 @@
 Contributors: wprashed
 Tags: activity log, audit log, security, diagnostics, monitoring, logging
 Requires at least: 6.0
-Tested up to: 6.9.4
+Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.3.3
+Stable tag: 1.3.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -121,6 +121,58 @@ Yes. The diagnostics area includes system checks, issue explanations, change cor
 
 It includes configuration for software vulnerability intelligence sources and can combine that data with file-integrity signals when configured.
 
+== External services ==
+
+TracePilot can connect to optional third-party services. External requests are feature-driven and occur only when the related feature is enabled/configured by an administrator.
+
+= Telegram Bot API (alerts) =
+
+* Service purpose: Deliver threat/summary alerts to a Telegram chat.
+* Data sent: Alert title/message text, site name, severity, event metadata included in the alert body.
+* When sent: Only when Telegram bot token + chat ID are configured and alert delivery is enabled.
+* Terms: https://telegram.org/tos
+* Privacy: https://telegram.org/privacy
+
+= Wordfence Vulnerability Intelligence API =
+
+* Service purpose: Check installed plugin/theme/core versions against known vulnerabilities.
+* Data sent: API key in Authorization header (if provided) and request metadata to fetch vulnerability feed data.
+* When sent: Only when software vulnerability scans are run and Wordfence provider is selected.
+* Terms: https://www.wordfence.com/terms-of-service/
+* Privacy: https://www.wordfence.com/privacy-policy/
+
+= Patchstack Vulnerability Database API =
+
+* Service purpose: Enrich local software inventory checks with Patchstack vulnerability data.
+* Data sent: Outbound HTTPS request metadata and optional API key if configured.
+* When sent: Only when software vulnerability scans are run and Patchstack provider is selected.
+* Terms: https://patchstack.com/terms-of-service/
+* Privacy: https://patchstack.com/privacy-policy/
+
+= WPScan API =
+
+* Service purpose: Check WordPress core/plugins/themes against WPScan vulnerability records.
+* Data sent: API token (if configured) and queried software slug/version identifiers.
+* When sent: Only when software vulnerability scans are run and WPScan provider is selected.
+* Terms: https://wpscan.com/terms-of-service/
+* Privacy: https://wpscan.com/privacy-policy/
+
+= ip-api (geolocation enrichment) =
+
+* Service purpose: Resolve IP geolocation context for log/threat metadata.
+* Data sent: IP address being enriched.
+* When sent: Only when geolocation is explicitly enabled by an administrator (disabled by default).
+* Terms and privacy: https://ip-api.com/docs/legal
+
+= Google Search Console API =
+
+* Service purpose: Fetch search performance metrics for the optional Search Console page.
+* Data sent: OAuth tokens, selected property URL, requested date range and dimensions.
+* When sent: Only after an administrator connects Google Search Console and requests analytics data.
+* Terms: https://policies.google.com/terms
+* Privacy: https://policies.google.com/privacy
+* Additional Google API user-data policy: https://developers.google.com/terms/api-services-user-data-policy
+
 == Screenshots ==
 
 1. Dashboard with activity summaries and charts.
@@ -131,6 +183,14 @@ It includes configuration for software vulnerability intelligence sources and ca
 6. Export screen with filterable report generation.
 
 == Changelog ==
+
+= 1.3.4 =
+* Compliance: replaced remaining inline scripts with WordPress enqueue/localize flow.
+* Security: tightened nonce handling with `wp_unslash()` + sanitization before `wp_verify_nonce()` in AJAX handlers.
+* Security: sanitized remaining request/server inputs in settings, API, logs, and response-action flows.
+* Privacy: geolocation remains opt-in and disabled by default; no geolocation calls are made unless enabled.
+* Docs: added full external-services disclosures with data usage, conditions, and policy links.
+* Metadata: updated `Tested up to` format to major version (`6.9`).
 
 = 1.3.3 =
 * Fix: prevent “Exclude roles from logging” from accidentally excluding every role (which can make the logger appear broken).
@@ -160,6 +220,9 @@ It includes configuration for software vulnerability intelligence sources and ca
 * Converted diagnostics into sub-tabs.
 
 == Upgrade Notice ==
+
+= 1.3.4 =
+This release focuses on WordPress.org compliance hardening (enqueue/security/sanitization/privacy/docs) and optional-service transparency.
 
 = 1.3.3 =
 This release fixes a common configuration pitfall that could unintentionally disable logging and expands software lifecycle logging coverage.
