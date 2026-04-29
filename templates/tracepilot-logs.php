@@ -17,7 +17,7 @@ $action_filter = isset($_GET['action_filter']) ? sanitize_text_field(wp_unslash(
 $date_from = isset($_GET['date_from']) ? sanitize_text_field(wp_unslash($_GET['date_from'])) : '';
 $date_to = isset($_GET['date_to']) ? sanitize_text_field(wp_unslash($_GET['date_to'])) : '';
 $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
-$site_filter = isset($_GET['site_id']) ? absint($_GET['site_id']) : 0;
+$site_filter = isset($_GET['site_id']) ? absint(wp_unslash($_GET['site_id'])) : 0;
 $severity_display = array(
     'info' => __('Info', 'tracepilot'),
     'warning' => __('Warning', 'tracepilot'),
@@ -231,10 +231,9 @@ foreach ($severity_rows as $row) {
         <div class="tracepilot-modal-body"></div>
     </div>
 </div>
-
-<script>
-window.tracepilotLogsSeverity = {
-    labels: <?php echo wp_json_encode($severity_labels); ?>,
-    values: <?php echo wp_json_encode($severity_values); ?>
-};
-</script>
+<div
+    id="tracepilot-logs-severity-data"
+    data-labels="<?php echo esc_attr(wp_json_encode($severity_labels)); ?>"
+    data-values="<?php echo esc_attr(wp_json_encode($severity_values)); ?>"
+    hidden
+></div>
