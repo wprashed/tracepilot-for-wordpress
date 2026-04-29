@@ -131,7 +131,7 @@ class TracePilot_Response_Actions {
             wp_send_json_error(array('message' => __('Permission denied.', 'tracepilot')));
         }
 
-        $user_id = isset($_POST['user_id']) ? absint($_POST['user_id']) : 0;
+        $user_id = isset($_POST['user_id']) ? absint(wp_unslash($_POST['user_id'])) : 0;
         if (!$user_id) {
             wp_send_json_error(array('message' => __('User ID is required.', 'tracepilot')));
         }
@@ -153,7 +153,7 @@ class TracePilot_Response_Actions {
             wp_send_json_error(array('message' => __('Permission denied.', 'tracepilot')));
         }
 
-        $user_id = isset($_POST['user_id']) ? absint($_POST['user_id']) : 0;
+        $user_id = isset($_POST['user_id']) ? absint(wp_unslash($_POST['user_id'])) : 0;
         $user = $user_id ? get_userdata($user_id) : false;
         if (!$user) {
             wp_send_json_error(array('message' => __('User not found.', 'tracepilot')));
@@ -173,7 +173,8 @@ class TracePilot_Response_Actions {
             wp_send_json_error(array('message' => __('Permission denied.', 'tracepilot')));
         }
 
-        $enabled = !empty($_POST['enabled']) ? 1 : 0;
+        $enabled = isset($_POST['enabled']) ? absint(wp_unslash($_POST['enabled'])) : 0;
+        $enabled = $enabled ? 1 : 0;
         $settings = TracePilot_Helpers::get_settings();
         $settings['plugin_changes_locked'] = $enabled;
         $this->persist_settings($settings);
@@ -191,7 +192,7 @@ class TracePilot_Response_Actions {
             wp_send_json_error(array('message' => __('Permission denied.', 'tracepilot')));
         }
 
-        $user_id = isset($_POST['user_id']) ? absint($_POST['user_id']) : 0;
+        $user_id = isset($_POST['user_id']) ? absint(wp_unslash($_POST['user_id'])) : 0;
         $rows = TracePilot_Helpers::export_user_logs($user_id);
 
         header('Content-Type: application/json; charset=utf-8');
@@ -209,7 +210,7 @@ class TracePilot_Response_Actions {
             wp_send_json_error(array('message' => __('Permission denied.', 'tracepilot')));
         }
 
-        $user_id = isset($_POST['user_id']) ? absint($_POST['user_id']) : 0;
+        $user_id = isset($_POST['user_id']) ? absint(wp_unslash($_POST['user_id'])) : 0;
         if (!$user_id) {
             wp_send_json_error(array('message' => __('User ID is required.', 'tracepilot')));
         }
