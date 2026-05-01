@@ -1,207 +1,206 @@
 # TracePilot
 
-TracePilot is a modern WordPress activity log, diagnostics, and threat-review plugin built for administrators who need visibility, traceability, and safer debugging tools inside wp-admin.
+TracePilot is a modern WordPress activity logging, diagnostics, and threat review plugin for administrators who need clarity when something changes, breaks, or looks suspicious.
 
-## Live Demo
+It captures important site events, explains issues in plain language, helps isolate plugin conflicts safely, and supports export and privacy workflows for audits and compliance.
 
-[Try Live Demo (No Setup Required)](https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/wprashed/tracepilot-for-wordpress/refs/heads/main/blueprint.json)
+## What TracePilot Helps You Do
 
-## Overview
+- See what changed before a problem appeared.
+- Track content, plugin, theme, and settings activity in one place.
+- Review site health with diagnostics, conflict detection, and safe mode tools.
+- Send alerts through multiple channels when high-signal events happen.
+- Manage privacy requests with export/delete tools and redaction controls.
 
-The plugin combines several admin-focused workflows in one place:
+## Key Features
 
-- Activity logging for user and system events
-- Searchable audit trails with filters and exports
-- Diagnostics and conflict detection with safe mode debugging
-- Threat detection, file integrity checks, and vulnerability intelligence settings
-- Privacy tools for user log export/delete requests
+- 🧾 **Activity audit log**  
+  Track important user and system actions such as logins, content edits, option changes, and software lifecycle events.
 
-## Features (with icons)
+- ✍️ **Content change tracking**  
+  Record post and page updates, publishes, unpublishes, trash/restore actions, and deletions with useful context.
 
-- 🧾 **Activity audit log**: Records key user and system events including logins, settings changes, content edits, and more.
-- ✍️ **Content change tracking**: Logs post/page updates, publish/unpublish, trash/restore, and deletion signals with helpful context.
-- 🧩 **Plugin and theme lifecycle**: Tracks activation/deactivation plus update/install/delete signals for plugins and themes.
-- 🔎 **Search and filters**: Find events by search text, severity, role, action key, date range, and site context (multisite).
-- 📊 **Admin dashboard**: A clean summary view with quick insight into recent activity.
-- 🧰 **System scanner**: Runs checks across server and WordPress signals and returns a health score with issue severity.
-- 🧪 **Conflict detection signals**: Detects potential hook collisions and builds a binary conflict isolation plan.
-- 🛡️ **Safe mode debugging**: Disable selected plugins only for your admin session so visitors never see the experiment.
-- 🔔 **Real-time alerts**: Send alerts to Email, generic webhooks, Slack, Discord, and Telegram.
-- 🧩 **Threat review workflow**: Surface suspicious patterns like failed logins and file-integrity signals for admin review.
-- 🧬 **File integrity**: Create a baseline and scan core/plugin/theme files for new, deleted, or modified changes.
-- 🧠 **Vulnerability intelligence**: Configure Wordfence, Patchstack, and WPScan lookups for installed plugins/themes/core.
-- 📤 **Exports**: Download logs as CSV, JSON, XML, or a plain-text report for incident review.
-- 🧹 **Retention and suppression**: Exclude noisy actions, suppress severities, and apply per-action retention rules.
-- 🔐 **Privacy and GDPR guardrails**: IP anonymization/UI masking, context redaction keys, and per-user export/delete tools.
-- 🌐 **Multisite support**: Aggregate logs across sites in network admin and filter by site/blog ID.
+- 🧩 **Plugin and theme lifecycle**  
+  Log activation, deactivation, installs, deletes, and updates so changes are easier to trace.
 
-## Quick Start (choose your path)
+- 🔎 **Search and filters**  
+  Quickly find events by text, role, action, severity, date range, and site context in multisite setups.
 
-- 🧾 **I need an audit trail**: Go to `TracePilot -> Activity Logs`, filter by `Action`/`Severity`, then export to CSV.
-- 🧪 **A page is broken**: Go to `TracePilot -> Diagnostics`, run a scan, then use `Safe Mode` to isolate plugin conflicts privately.
-- 🛡️ **I suspect suspicious activity**: Enable alerts, review threat rules, and build a file integrity baseline.
-- 🔐 **I got a privacy request**: Use per-user export/delete tools and enable IP anonymization and context redaction keys.
+- 📊 **Modern admin dashboard**  
+  Review summaries, recent activity, and visual insights from one central screen.
 
-## What gets logged (examples)
+- 🧰 **System diagnostics scanner**  
+  Run checks across PHP, cron, REST health, database signals, and server limits with a health score and issue list.
 
-<details>
-  <summary>✍️ Content events</summary>
+- 🧪 **Conflict detection**  
+  Identify possible hook collisions and build a safe split-test plan before making risky changes.
 
-  - Post/page publish, update, unpublish
-  - Trash, restore, delete
-</details>
+- 🛡️ **Safe mode debugging**  
+  Temporarily disable selected plugins only for your admin session so visitors are not affected.
 
-<details>
-  <summary>🔐 Authentication events</summary>
+- 🔔 **Real alert channels**  
+  Route alerts to Email, webhooks, Slack, Discord, or Telegram.
 
-  - Login, logout
-  - Failed login attempts
-</details>
+- 🧩 **Threat review workflow**  
+  Flag suspicious patterns such as failed logins, unusual logins, and file integrity signals for admin review.
 
-<details>
-  <summary>🧩 Plugin and theme events</summary>
+- 🧬 **File integrity monitoring**  
+  Build a baseline for core, plugin, and theme files, then scan for new, deleted, or modified files.
 
-  - Activation and deactivation
-  - Updates
-  - Install/delete signals when WordPress reports them via the upgrader
-</details>
+- 🧠 **Vulnerability intelligence**  
+  Configure optional lookups from Wordfence, Patchstack, and WPScan for installed plugins, themes, and WordPress core.
 
-<details>
-  <summary>⚙️ Configuration signals</summary>
+- 📤 **Export tools**  
+  Download logs as CSV, JSON, XML, or plain text for incident review and reporting.
 
-  - Settings/options changes that often explain “what changed?” regressions
-</details>
+- 🧹 **Retention and suppression**  
+  Reduce noise with excluded actions, suppressed severities, and per-action retention rules.
 
-## Highlights
+- 🔐 **Privacy and GDPR guardrails**  
+  Use IP anonymization, UI masking, context redaction keys, and per-user export/delete tools.
 
-### Activity logging
+- 🌐 **Multisite support**  
+  Aggregate logs across sites and filter by site or blog ID in supported admin views.
 
-- Tracks user and system actions
-- Stores severity, IP, role, object, and context data
-- Provides a modern log stream and detailed modal view
-- Supports multisite-aware retrieval on supported screens
+## What Gets Logged
 
-### Diagnostics and conflict detection
+TracePilot focuses on practical, high-value events rather than endless noise.
 
-- Runs a system scan and assigns a health score
-- Explains technical issues in plain language
-- Builds issue history and change correlation
-- Includes admin-session safe mode for conflict testing
+- Content events: publish, update, unpublish, trash, restore, delete
+- Authentication events: login, logout, failed login attempts
+- Settings changes: options and configuration updates
+- Plugin and theme changes: activation, deactivation, install, delete, update
+- Diagnostics signals: scan findings, conflict hints, and change correlation entries
 
-### Security workflow
+## Quick Start
 
-- Threat detection rules for suspicious behavior
-- File integrity baseline and comparison tools
-- Vulnerability intelligence settings for Wordfence, Patchstack, and WPScan
-- Alert routing for Email, generic webhooks, Slack, Discord, and Telegram
+1. Install and activate TracePilot.
+2. Open `TracePilot` from the WordPress admin menu.
+3. Go to `Activity Logs`.
+4. Make a visible change such as updating a page or activating a plugin.
+5. Refresh the log stream and open `View Details` on the newest entry.
+6. Optionally enable alerts, privacy controls, and diagnostics based on your workflow.
 
-### Privacy and compliance
+## Built for Real Workflows
 
-- IP anonymization
-- Context redaction keys
-- Retention controls
-- Per-user export and delete tools
+- Site owners who need an audit trail
+- Agencies managing client sites
+- Support engineers investigating regressions
+- Administrators reviewing plugin conflicts and security signals
+- Teams handling compliance requests and log exports
 
-## Included admin areas
+## Developer Notes
 
-- Dashboard
-- Activity Logs
-- Analytics
-- Threat Detection
-- Server Recommendations
-- Diagnostics
-- Search Console
-- Archive
-- Export
-- Settings
+TracePilot follows WordPress standards for escaping, sanitization, nonce checks, and translatable strings.
+
+If you extend the plugin or add custom logging from another plugin/theme, the helper API is available:
+
+```php
+TracePilot_Helpers::log_activity( $action, $description, $severity, $args );
+```
 
 ## Installation
 
-1. Upload the plugin to `wp-content/plugins/wp-activity-logger`.
-2. Activate it from the WordPress `Plugins` screen.
-3. Open `TracePilot` from the admin menu.
-4. Configure privacy, notifications, diagnostics, and threat detection settings to match your site.
+1. Upload the plugin folder to `/wp-content/plugins/`, or install it from the WordPress admin Plugins screen.
+2. Activate the plugin.
+3. Open `TracePilot` in the admin menu.
+4. Review the `Settings`, `Diagnostics`, and `Threat Detection` areas to configure the plugin for your workflow.
 
-## Common playbooks
+## FAQ
 
-<details>
-  <summary>🧪 Conflict isolation in under 10 minutes</summary>
+### What does TracePilot log?
 
-  1. Open `TracePilot -> Diagnostics` and run a scan.
-  2. Review “hook collision” signals (if present) and the suggested plugin set.
-  3. Start `Safe Mode` for your admin session only.
-  4. Disable half the suspected plugins, retest the failing page, then switch halves.
-</details>
+It logs tracked user and system events such as authentication activity, settings changes, content updates, and selected plugin or theme operations.
 
-<details>
-  <summary>🔔 Set up real alerts (Slack/Discord/Telegram)</summary>
+### Can I filter the logs?
 
-  1. Go to `TracePilot -> Settings -> Notifications`.
-  2. Enable notifications.
-  3. Add your Slack/Discord webhook or Telegram bot token + chat ID.
-  4. Choose which severities/events should alert.
-</details>
+Yes. The log stream supports filtering by search text, role, action, severity, date range, and multisite context.
 
-<details>
-  <summary>🔐 Privacy-friendly logging (GDPR-style defaults)</summary>
+### Why don’t I see new logs?
 
-  1. Enable GDPR guardrails.
-  2. Turn on IP anonymization and UI masking.
-  3. Add context redaction keys (tokens/emails/etc).
-  4. Use per-user export/delete tools for privacy requests.
-</details>
+Usually the event is being filtered by settings.
 
-## Documentation map
+1. Check `Settings` -> `Privacy` and make sure your role is not excluded.
+2. Check `Settings` -> `Retention` and `Suppression` to confirm the event is not being filtered out.
+3. Try a high-signal event such as a failed login or plugin activation.
 
-- [Installation guide](docs/installation.md)
-- [User guide](docs/user-guide.md)
-- [FAQ](docs/faq.md)
-- [Developer guide](docs/developer-guide.md)
-- [External services & data flow](docs/external-services.md)
+### Does TracePilot support multisite?
 
-## External services (optional integrations)
+Yes. It includes multisite-aware log retrieval and site filters in supported admin views.
 
-TracePilot only contacts third-party services when you enable and configure the related feature.
+### Can I export data for privacy or compliance requests?
 
-- 🔔 **Telegram Bot API** (`api.telegram.org`): sends alert payloads (message text + event metadata) when Telegram alerts are configured and enabled. Terms: [telegram.org/tos](https://telegram.org/tos), Privacy: [telegram.org/privacy](https://telegram.org/privacy)
-- 🛡️ **Wordfence API** (`wordfence.com`): fetches vulnerability intelligence during software scans when Wordfence is selected. Terms: [wordfence.com/terms-of-service](https://www.wordfence.com/terms-of-service/), Privacy: [wordfence.com/privacy-policy](https://www.wordfence.com/privacy-policy/)
-- 🧩 **Patchstack API** (`patchstack.com`): fetches vulnerability intelligence during software scans when Patchstack is selected. Terms: [patchstack.com/terms-of-service](https://patchstack.com/terms-of-service/), Privacy: [patchstack.com/privacy-policy](https://patchstack.com/privacy-policy/)
-- 🧠 **WPScan API** (`wpscan.com`): fetches vulnerability records during software scans when WPScan is selected. Terms: [wpscan.com/terms-of-service](https://wpscan.com/terms-of-service/), Privacy: [wpscan.com/privacy-policy](https://wpscan.com/privacy-policy/)
-- 🌍 **ip-api geolocation** (`ip-api.com`): enriches an IP with geo context only when geolocation is explicitly enabled (off by default). Legal/Privacy: [ip-api.com/docs/legal](https://ip-api.com/docs/legal)
-- 🔎 **Google Search Console API** (`googleapis.com`): fetches optional search analytics after an admin connects GSC and requests data. Terms: [policies.google.com/terms](https://policies.google.com/terms), Privacy: [policies.google.com/privacy](https://policies.google.com/privacy), API policy: [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy)
+Yes. You can export filtered logs or export/delete log history for a specific user from the settings tools.
 
-## WordPress standards pass
+### Does it support diagnostics and conflict testing?
 
-This repository has been tightened toward WordPress plugin standards:
+Yes. The diagnostics area includes system checks, issue explanations, change correlation, and admin-session safe mode for plugin conflict testing.
 
-- admin inputs are sanitized before save
-- key AJAX requests use nonce checks and capability checks
-- major admin outputs are escaped
-- user-facing strings are wrapped for translation
-- metadata and readme files are aligned for WordPress distribution
+### Does it include vulnerability scanning?
 
-## Developer example
+Yes. It can combine optional vulnerability intelligence sources with file integrity signals when configured.
 
-```php
-TracePilot_Helpers::init();
+## External Services
 
-TracePilot_Helpers::log_activity(
-    'custom_action',
-    __('Custom action recorded from another plugin.', 'tracepilot'),
-    'info',
-    array(
-        'object_type' => 'integration',
-        'object_name' => 'Example integration',
-    )
-);
-```
+TracePilot can connect to optional third-party services. These requests are feature-driven and only happen when the related feature is enabled and configured by an administrator.
 
-## Author
+### Telegram Bot API
 
-- Author: Rashed Hossain
-- Website: [https://rashed.im/](https://rashed.im/)
-- WordPress.org: [wprashed](https://profiles.wordpress.org/wprashed/)
+- Purpose: Deliver threat and summary alerts to a Telegram chat.
+- Data sent: Alert title, message text, site name, severity, and event metadata included in the alert body.
+- When sent: Only when Telegram bot token and chat ID are configured and alert delivery is enabled.
+- Terms: https://telegram.org/tos
+- Privacy: https://telegram.org/privacy
+
+### Wordfence Vulnerability Intelligence API
+
+- Purpose: Check installed plugin, theme, and core versions against known vulnerabilities.
+- Data sent: API key in the Authorization header if configured, plus request metadata for the vulnerability feed.
+- When sent: Only when software vulnerability scans are run and Wordfence is selected.
+- Terms: https://www.wordfence.com/terms-of-service/
+- Privacy: https://www.wordfence.com/privacy-policy/
+
+### Patchstack Vulnerability Database API
+
+- Purpose: Enrich local software inventory checks with Patchstack vulnerability data.
+- Data sent: HTTPS request metadata and optional API key if configured.
+- When sent: Only when software vulnerability scans are run and Patchstack is selected.
+- Terms: https://patchstack.com/terms-of-service/
+- Privacy: https://patchstack.com/privacy-policy/
+
+### WPScan API
+
+- Purpose: Check WordPress core, plugins, and themes against WPScan vulnerability records.
+- Data sent: API token if configured and queried software version/slug identifiers.
+- When sent: Only when software vulnerability scans are run and WPScan is selected.
+- Terms: https://wpscan.com/terms-of-service/
+- Privacy: https://wpscan.com/privacy-policy/
+
+### ip-api Geolocation
+
+- Purpose: Resolve IP geolocation context for log and threat metadata.
+- Data sent: The IP address being enriched.
+- When sent: Only when geolocation is explicitly enabled by an administrator.
+- Terms and privacy: https://ip-api.com/docs/legal
+
+### Google Search Console API
+
+- Purpose: Fetch search performance metrics for the optional Search Console page.
+- Data sent: OAuth tokens, selected property URL, date range, and requested dimensions.
+- When sent: Only after an administrator connects Google Search Console and requests analytics data.
+- Terms: https://policies.google.com/terms
+- Privacy: https://policies.google.com/privacy
+- Additional user data policy: https://developers.google.com/terms/api-services-user-data-policy
+
+## Screens
+
+- Dashboard with activity summaries and charts
+- Log stream with filters and event cards
+- Detailed log view with timeline context
+- Diagnostics scanner with safe mode tools
+- Threat detection and vulnerability intelligence controls
+- Export tools with filterable report generation
 
 ## Version
 
-Current documented release: `1.3.4`
+Current package version: `1.0.0`
